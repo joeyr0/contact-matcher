@@ -7,6 +7,7 @@ import Anthropic from '@anthropic-ai/sdk';
 
 import { buildSheet15Index, buildOptOutIndex } from '../src/lib/indexer.js';
 import { parseContactCSV } from '../src/lib/csv.js';
+import { normalizeDomain } from '../src/lib/normalize.js';
 import { extractDomain, matchDomain } from '../src/lib/matcher.js';
 import { getNgramCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import type { Sheet15Index, OptOutIndex, EnrichedRow, FuzzyBatchResult } from '../src/lib/types.js';
@@ -157,12 +158,12 @@ app.post('/api/match/stream', (req, res) => {
 
     const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
-    const { headers, rows, emailColIdx } = parsed;
+    const { headers, rows, emailColIdx, isDomainColumn } = parsed;
     const results: EnrichedRow[] = [];
 
     for (let i = 0; i < rows.length; i++) {
-      const rawEmail = (rows[i]?.[emailColIdx] ?? '').trim();
-      const domain = extractDomain(rawEmail);
+      const rawValue = (rows[i]?.[emailColIdx] ?? '').trim();
+      const domain = isDomainColumn ? normalizeDomain(rawValue) : extractDomain(rawValue);
       const match = matchDomain(domain, sheet15Index, optOutIndex);
       results.push({ originalRow: rows[i] ?? [], domain, match });
 

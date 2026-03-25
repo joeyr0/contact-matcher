@@ -3,6 +3,7 @@ import { list } from '@vercel/blob';
 import formidable from 'formidable';
 import fs from 'fs';
 import { parseContactCSV } from '../../src/lib/csv';
+import { normalizeDomain } from '../../src/lib/normalize';
 import { extractDomain, matchDomain } from '../../src/lib/matcher';
 import type { Sheet15Index, OptOutIndex, EnrichedRow } from '../../src/lib/types';
 
@@ -69,15 +70,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  const { headers, rows, emailColIdx } = parsed;
+  const { headers, rows, emailColIdx, isDomainColumn } = parsed;
   const total = rows.length;
   const results: EnrichedRow[] = [];
 
   // Run Tier 1 matching
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    const rawEmail = row[emailColIdx] ?? '';
-    const domain = extractDomain(rawEmail.trim());
+    const rawValue = (row[emailColIdx] ?? '').trim();
+    const domain = isDomainColumn ? normalizeDomain(rawValue) : extractDomain(rawValue);
     const match = matchDomain(domain, sheet15Index, optOutIndex);
 
     results.push({ originalRow: row, domain, match });
