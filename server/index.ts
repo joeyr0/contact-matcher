@@ -138,11 +138,17 @@ app.post('/api/match/stream', (req, res) => {
       return;
     }
 
+    const columnMode = (Array.isArray(_fields['columnMode']) ? _fields['columnMode'][0] : _fields['columnMode']) ?? 'auto';
+
     const parsed = parseContactCSV(csvText);
     if (parsed.error) {
       res.status(400).json({ error: parsed.error });
       return;
     }
+
+    // Override auto-detection with explicit user choice
+    if (columnMode === 'email') parsed.isDomainColumn = false;
+    if (columnMode === 'website') parsed.isDomainColumn = true;
 
     const sheet15Index = readJSON<Sheet15Index>('sheet15-index.json');
     const optOutIndex = readJSON<OptOutIndex>('optout-index.json');
