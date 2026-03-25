@@ -36,12 +36,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Parse uploaded file
   const form = formidable({ maxFileSize: 50 * 1024 * 1024 });
   let csvText: string;
+  let columnMode = 'auto';
   try {
-    const [, files] = await form.parse(req);
+    const [fields, files] = await form.parse(req);
     const fileField = files['file'];
     const uploadedFile = Array.isArray(fileField) ? fileField[0] : fileField;
     if (!uploadedFile) return res.status(400).json({ error: 'No file provided' });
     csvText = fs.readFileSync(uploadedFile.filepath, 'utf-8');
+    const modeField = fields['columnMode'];
+    if (modeField) columnMode = Array.isArray(modeField) ? (modeField[0] ?? 'auto') : modeField;
   } catch (err) {
     return res.status(400).json({ error: `Failed to parse upload: ${String(err)}` });
   }
@@ -51,6 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (parsed.error) {
     return res.status(400).json({ error: parsed.error });
   }
+
+  // Override auto-detection with explicit user choice
+  if (columnMode === 'email') parsed.isDomainColumn = false;
+  if (columnMode === 'website') parsed.isDomainColumn = true;
 
   // Load reference indexes from Vercel Blob
   let sheet15Index: Sheet15Index;

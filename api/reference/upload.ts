@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { put, head } from '@vercel/blob';
+import { put, list } from '@vercel/blob';
 import formidable from 'formidable';
 import fs from 'fs';
 import { buildSheet15Index, buildOptOutIndex } from '../../src/lib/indexer';
@@ -32,11 +32,10 @@ async function getMetadata(): Promise<Metadata> {
   };
 
   try {
-    const blob = await head('metadata.json', {
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-    });
-    if (!blob) return defaultMeta;
-    const res = await fetch(blob.url);
+    const { blobs } = await list({ prefix: 'metadata.json', token: process.env.BLOB_READ_WRITE_TOKEN });
+    const metaBlob = blobs.find((b) => b.pathname === 'metadata.json');
+    if (!metaBlob) return defaultMeta;
+    const res = await fetch(metaBlob.url);
     if (!res.ok) return defaultMeta;
     return (await res.json()) as Metadata;
   } catch {

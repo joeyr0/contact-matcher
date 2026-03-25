@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { head } from '@vercel/blob';
+import { list } from '@vercel/blob';
 import type { ReferenceStatus } from '../../src/lib/types';
 
 const defaultStatus: ReferenceStatus = {
@@ -13,10 +13,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const blob = await head('metadata.json', { token: process.env.BLOB_READ_WRITE_TOKEN });
-    if (!blob) return res.status(200).json(defaultStatus);
+    const { blobs } = await list({ prefix: 'metadata.json', token: process.env.BLOB_READ_WRITE_TOKEN });
+    const metaBlob = blobs.find((b) => b.pathname === 'metadata.json');
+    if (!metaBlob) return res.status(200).json(defaultStatus);
 
-    const metaRes = await fetch(blob.url);
+    const metaRes = await fetch(metaBlob.url);
     if (!metaRes.ok) return res.status(200).json(defaultStatus);
 
     const metadata = (await metaRes.json()) as ReferenceStatus;

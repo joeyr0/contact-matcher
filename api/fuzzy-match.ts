@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { list } from '@vercel/blob';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { getNgramCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy';
 import { matchDomain } from '../src/lib/matcher';
 import type { Sheet15Index, OptOutIndex, FuzzyBatchResult } from '../src/lib/types';
@@ -16,8 +16,8 @@ async function loadBlobJSON<T>(blobName: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function callAnthropicWithRetry(
-  client: Anthropic,
+async function callOpenAIWithRetry(
+  client: OpenAI,
   system: string,
   user: string,
   maxRetries = 3,
@@ -25,22 +25,19 @@ async function callAnthropicWithRetry(
   let lastError: unknown;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const message = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+      const completion = await client.chat.completions.create({
+        model: 'gpt-4o',
         max_tokens: 1024,
-        system,
-        messages: [{ role: 'user', content: user }],
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
       });
-      const block = message.content[0];
-      return block.type === 'text' ? block.text : '';
+      return completion.choices[0]?.message?.content ?? '';
     } catch (err) {
       lastError = err;
-      const isRateLimit = err instanceof Anthropic.RateLimitError;
       if (attempt < maxRetries - 1) {
-        const delayMs = isRateLimit
-          ? Math.pow(2, attempt) * 1000  // 1s, 2s, 4s for rate limits
-          : Math.pow(2, attempt) * 500;   // 500ms, 1s, 2s for other errors
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 500));
       }
     }
   }
@@ -85,12 +82,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Call LLM
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const { system, user } = buildFuzzyPrompt(validDomains, candidates);
 
   let responseText: string;
   try {
-    responseText = await callAnthropicWithRetry(client, system, user);
+    responseText = await callOpenAIWithRetry(client, system, user);
   } catch (err) {
     const result: FuzzyBatchResult = {
       matches: {},
