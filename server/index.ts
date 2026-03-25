@@ -3,7 +3,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import formidable from 'formidable';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 import { buildSheet15Index, buildOptOutIndex } from '../src/lib/indexer.js';
 import { parseContactCSV } from '../src/lib/csv.js';
@@ -212,13 +212,13 @@ app.post('/api/fuzzy-match', async (req, res) => {
     return;
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    res.status(500).json({ error: 'ANTHROPIC_API_KEY not set in .env' });
+    res.status(500).json({ error: 'OPENAI_API_KEY not set in .env' });
     return;
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = new OpenAI({ apiKey });
   const { system, user } = buildFuzzyPrompt(validDomains, candidates);
 
   let responseText: string;
@@ -227,21 +227,19 @@ app.post('/api/fuzzy-match', async (req, res) => {
     responseText = '';
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const msg = await client.messages.create({
-          model: 'claude-sonnet-4-20250514',
+        const completion = await client.chat.completions.create({
+          model: 'gpt-4o',
           max_tokens: 1024,
-          system,
-          messages: [{ role: 'user', content: user }],
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
         });
-        const block = msg.content[0];
-        responseText = block.type === 'text' ? block.text : '';
+        responseText = completion.choices[0]?.message?.content ?? '';
         break;
       } catch (e) {
         lastErr = e;
-        const delay = e instanceof Anthropic.RateLimitError
-          ? Math.pow(2, attempt) * 1000
-          : Math.pow(2, attempt) * 500;
-        await new Promise((r) => setTimeout(r, delay));
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 500));
       }
     }
     if (!responseText) throw lastErr;
