@@ -1,21 +1,29 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import ReferenceDataManager from './components/ReferenceDataManager';
 import ContactUpload from './components/ContactUpload';
 import MatchProgress from './components/MatchProgress';
 import ResultsTable from './components/ResultsTable';
 import FuzzyMatcher from './components/FuzzyMatcher';
-import type { EnrichedRow, MatchResult } from './lib/types';
+import type { EnrichedRow, MatchResult, ReferenceStatus } from './lib/types';
 
 type Tab = 'reference' | 'match';
 type MatchState = 'idle' | 'matching' | 'complete';
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('reference');
+  const [tab, setTab] = useState<Tab>('match');
+  const [refStatus, setRefStatus] = useState<ReferenceStatus | null>(null);
   const [matchState, setMatchState] = useState<MatchState>('idle');
   const [progress, setProgress] = useState({ processed: 0, total: 0 });
   const [results, setResults] = useState<EnrichedRow[]>([]);
   const [resultHeaders, setResultHeaders] = useState<string[]>([]);
   const [matchError, setMatchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/reference/status')
+      .then((r) => r.json())
+      .then((d) => setRefStatus(d as ReferenceStatus))
+      .catch(() => null);
+  }, [tab]);
 
   const handleMatchStart = () => {
     setMatchState('matching');
@@ -70,8 +78,8 @@ export default function App() {
           <nav className="-mb-px flex gap-4">
             {(
               [
-                { id: 'reference', label: 'Reference Data' },
-                { id: 'match', label: 'Match Contacts' },
+                { id: 'match', label: 'Match' },
+                { id: 'reference', label: 'Salesforce Data' },
               ] as const
             ).map(({ id, label }) => (
               <button
@@ -95,6 +103,19 @@ export default function App() {
 
         {tab === 'match' && (
           <div className="space-y-6">
+            {refStatus && (!refStatus.sheet15.loaded || !refStatus.optout.loaded) && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+                <span className="font-medium">Setup required:</span>{' '}
+                Upload your Salesforce data before matching.{' '}
+                <button
+                  onClick={() => setTab('reference')}
+                  className="underline font-medium hover:text-amber-900"
+                >
+                  Go to Salesforce Data →
+                </button>
+              </div>
+            )}
+
             {matchState === 'idle' && (
               <>
                 {matchError && (

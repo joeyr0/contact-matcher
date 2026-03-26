@@ -74,7 +74,7 @@ function UploadZone({ label, description, type, status, onUploadComplete }: Uplo
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'text/csv': ['.csv'], 'text/plain': ['.csv'] },
+    accept: { 'text/csv': ['.csv'], 'text/plain': ['.csv'], 'application/vnd.ms-excel': ['.csv'], 'application/csv': ['.csv'] },
     multiple: false,
     disabled: uploading,
   });

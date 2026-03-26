@@ -103,7 +103,7 @@ export default function ContactUpload({
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'text/csv': ['.csv'], 'text/plain': ['.csv', '.txt'] },
+    accept: { 'text/csv': ['.csv'], 'text/plain': ['.csv', '.txt'], 'application/vnd.ms-excel': ['.csv'], 'application/csv': ['.csv'] },
     multiple: false,
     disabled: uploading || disabled,
   });

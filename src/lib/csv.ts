@@ -15,6 +15,14 @@ const EMAIL_HEADER_NAMES = new Set([
   'email_address',
   'emailaddress',
   'email address',
+  'emails',
+  'work email',
+  'work_email',
+  'business email',
+  'contact email',
+  'mail',
+  'email id',
+  'email_id',
 ]);
 
 const DOMAIN_HEADER_NAMES = new Set([
@@ -27,6 +35,14 @@ const DOMAIN_HEADER_NAMES = new Set([
   'company_website',
   'company url',
   'company_url',
+  'web',
+  'site',
+  'homepage',
+  'company domain',
+  'company_domain',
+  'domains',
+  'websites',
+  'urls',
 ]);
 
 export function parseContactCSV(csvText: string): ParsedContactCSV {
@@ -58,7 +74,7 @@ export function parseContactCSV(csvText: string): ParsedContactCSV {
   const sample = rows.slice(0, 10);
   for (let colIdx = 0; colIdx < headers.length; colIdx++) {
     const atCount = sample.filter((row) => row[colIdx]?.includes('@')).length;
-    if (sample.length > 0 && atCount / sample.length > 0.8) {
+    if (sample.length > 0 && atCount / sample.length > 0.5) {
       return { headers, rows, emailColIdx: colIdx, isDomainColumn: false };
     }
   }
@@ -68,7 +84,7 @@ export function parseContactCSV(csvText: string): ParsedContactCSV {
     const dotCount = sample.filter(
       (row) => row[colIdx]?.includes('.') && !row[colIdx]?.includes('@'),
     ).length;
-    if (sample.length > 0 && dotCount / sample.length > 0.8) {
+    if (sample.length > 0 && dotCount / sample.length > 0.5) {
       return { headers, rows, emailColIdx: colIdx, isDomainColumn: true };
     }
   }
