@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
-import { buildDomainLookup, getFastCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
+import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
 import { matchDomain } from '../src/lib/matcher.js';
 import { readDataJSON } from './lib/readData.js';
@@ -30,7 +30,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!_domainLookupCache) {
     _domainLookupCache = buildDomainLookup(Object.keys(sheet15Index));
   }
-  const candidates = getFastCandidates(validDomains, _domainLookupCache);
+  const rawCandidates = getFastCandidates(validDomains, _domainLookupCache);
+  const candidates = rankAndLimitCandidates(validDomains, rawCandidates, 200);
 
   if (candidates.length === 0) {
     return res.status(200).json({ matches: {}, failedDomains: validDomains } as FuzzyBatchResult);
@@ -49,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const completion = await client.chat.completions.create({
-          model: 'gpt-4o',
+          model: 'gpt-4o-mini',
           max_tokens: 1024,
           messages: [
             { role: 'system', content: system },

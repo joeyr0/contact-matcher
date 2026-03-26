@@ -9,7 +9,7 @@ import { buildSheet15Index, buildOptOutIndex } from '../src/lib/indexer.js';
 import { parseContactCSV } from '../src/lib/csv.js';
 import { normalizeDomain } from '../src/lib/normalize.js';
 import { extractDomain, matchDomain } from '../src/lib/matcher.js';
-import { buildDomainLookup, getFastCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
+import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
 import type { Sheet15Index, OptOutIndex, EnrichedRow, FuzzyBatchResult } from '../src/lib/types.js';
 
@@ -247,7 +247,8 @@ app.post('/api/fuzzy-match', async (req, res) => {
     res.status(503).json({ error: 'Reference data not loaded' });
     return;
   }
-  const candidates = getFastCandidates(validDomains, lookup);
+  const rawCandidates = getFastCandidates(validDomains, lookup);
+  const candidates = rankAndLimitCandidates(validDomains, rawCandidates, 200);
 
   if (candidates.length === 0) {
     const result: FuzzyBatchResult = { matches: {}, failedDomains: validDomains };
@@ -271,7 +272,7 @@ app.post('/api/fuzzy-match', async (req, res) => {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const completion = await client.chat.completions.create({
-          model: 'gpt-4o',
+          model: 'gpt-4o-mini',
           max_tokens: 1024,
           messages: [
             { role: 'system', content: system },

@@ -1,60 +1,138 @@
 import { normalizeDomain } from './normalize';
 
 // ---------------------------------------------------------------------------
-// Character bigram similarity
+// Fast candidate lookup — O(1) per domain via pre-built indexes
 // ---------------------------------------------------------------------------
 
-function getBigrams(str: string): Set<string> {
-  const bigrams = new Set<string>();
-  for (let i = 0; i < str.length - 1; i++) {
-    bigrams.add(str.slice(i, i + 2));
-  }
-  return bigrams;
+export interface DomainLookup {
+  byTld: Map<string, string[]>;      // '.io' -> ['company.io', ...]
+  byPrefix: Map<string, string[]>;   // 'hel' -> ['hello.com', ...]  (first 3 chars of root)
 }
 
-function bigramSimilarity(a: string, b: string): number {
-  if (a.length < 2 || b.length < 2) return a === b ? 1 : 0;
-  const bigramsA = getBigrams(a);
-  const bigramsB = getBigrams(b);
-  let intersection = 0;
-  for (const bg of bigramsA) {
-    if (bigramsB.has(bg)) intersection++;
+/** Build once at startup from the Sheet15 reference domain list. */
+export function buildDomainLookup(domains: string[]): DomainLookup {
+  const byTld = new Map<string, string[]>();
+  const byPrefix = new Map<string, string[]>();
+
+  for (const d of domains) {
+    const dot = d.lastIndexOf('.');
+    const tld = dot !== -1 ? d.slice(dot) : '';
+    const root = dot !== -1 ? d.slice(0, dot) : d;
+    const prefix = root.slice(0, 3).toLowerCase();
+
+    let tldList = byTld.get(tld);
+    if (!tldList) { tldList = []; byTld.set(tld, tldList); }
+    tldList.push(d);
+
+    let pfxList = byPrefix.get(prefix);
+    if (!pfxList) { pfxList = []; byPrefix.set(prefix, pfxList); }
+    pfxList.push(d);
   }
-  return (2 * intersection) / (bigramsA.size + bigramsB.size);
+
+  return { byTld, byPrefix };
 }
 
 /**
- * For a batch of unmatched domains, compute the union of their top candidates
- * from the full reference domain list. Returns at most maxCandidates domains.
+ * Fast candidate finder using pre-built TLD + prefix indexes.
+ * No per-domain iteration over the full 18k list — just two hash lookups.
  */
-export function getNgramCandidates(
+export function getFastCandidates(
   unmatchedDomains: string[],
-  allReferenceDomains: string[],
-  maxPerDomain = 300,
+  lookup: DomainLookup,
 ): string[] {
-  const candidateSet = new Set<string>();
+  const candidates = new Set<string>();
 
-  for (const unmatched of unmatchedDomains) {
-    const base = unmatched.split('.')[0]; // e.g. "haiku" from "haiku.trade"
+  for (const domain of unmatchedDomains) {
+    const dot = domain.lastIndexOf('.');
+    const tld = dot !== -1 ? domain.slice(dot) : '';
+    const root = dot !== -1 ? domain.slice(0, dot) : domain;
 
-    const scored = allReferenceDomains
-      .map((ref) => ({
-        ref,
-        score: Math.max(
-          bigramSimilarity(unmatched, ref),
-          bigramSimilarity(base, ref.split('.')[0]),
-        ),
-      }))
-      .filter(({ score }) => score > 0.1)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, maxPerDomain);
+    // All domains with the same TLD
+    for (const d of lookup.byTld.get(tld) ?? []) candidates.add(d);
 
-    for (const { ref } of scored) {
-      candidateSet.add(ref);
+    // All domains sharing the first 3 chars of their root
+    const prefix3 = root.slice(0, 3).toLowerCase();
+    for (const d of lookup.byPrefix.get(prefix3) ?? []) candidates.add(d);
+
+    // Also try 2-char prefix for short roots
+    if (root.length >= 2) {
+      const prefix2 = root.slice(0, 2).toLowerCase();
+      for (const d of lookup.byPrefix.get(prefix2) ?? []) candidates.add(d);
     }
   }
 
-  return Array.from(candidateSet);
+  return Array.from(candidates);
+}
+
+/** @deprecated Use buildDomainLookup + getFastCandidates instead. Kept for tests. */
+export function getNgramCandidates(
+  unmatchedDomains: string[],
+  allReferenceDomains: string[],
+): string[] {
+  const lookup = buildDomainLookup(allReferenceDomains);
+  return getFastCandidates(unmatchedDomains, lookup);
+}
+
+/**
+ * Score a reference candidate against a single unmatched domain.
+ * Higher = more likely to be the same company.
+ *
+ * Key insight: blockaid.co vs blockaid.io → same root → score 100.
+ * Domains just sharing a TLD or 2-char prefix score much lower.
+ */
+function scoreCandidate(candidate: string, domain: string): number {
+  const cDot = candidate.lastIndexOf('.');
+  const dDot = domain.lastIndexOf('.');
+  const cRoot = cDot !== -1 ? candidate.slice(0, cDot) : candidate;
+  const dRoot = dDot !== -1 ? domain.slice(0, dDot) : domain;
+  const cTld  = cDot !== -1 ? candidate.slice(cDot) : '';
+  const dTld  = dDot !== -1 ? domain.slice(dDot) : '';
+
+  let score = 0;
+
+  if (cRoot === dRoot) {
+    // Identical root (blockaid.io → blockaid.co) — very strong signal
+    score += 100;
+  } else if (cRoot.length >= 4 && dRoot.length >= 4) {
+    if (dRoot.includes(cRoot) || cRoot.includes(dRoot)) {
+      // One root contains the other (e.g., "thecompany" vs "company")
+      score += 55;
+    } else {
+      // Longest common prefix of roots
+      let lcp = 0;
+      while (lcp < cRoot.length && lcp < dRoot.length && cRoot[lcp] === dRoot[lcp]) lcp++;
+      score += lcp * 8;
+    }
+  }
+
+  // Same TLD is a weak bonus (avoids drowning out same-root cross-TLD matches)
+  if (cTld === dTld) score += 3;
+
+  return score;
+}
+
+/**
+ * Rank candidates by how similar they are to any domain in the batch,
+ * then return the top maxCount. This ensures high-signal candidates
+ * (e.g., blockaid.co when matching blockaid.io) float to the top of
+ * the LLM prompt instead of being buried in a flat list of 500+ entries.
+ */
+export function rankAndLimitCandidates(
+  unmatchedDomains: string[],
+  candidates: string[],
+  maxCount = 200,
+): string[] {
+  // O(candidates × batch_size) — typically 500 × 20 = 10,000 ops, negligible
+  const scored = candidates.map((c) => {
+    let best = 0;
+    for (const d of unmatchedDomains) {
+      const s = scoreCandidate(c, d);
+      if (s > best) best = s;
+    }
+    return { c, best };
+  });
+  scored.sort((a, b) => b.best - a.best);
+  return scored.slice(0, maxCount).map((x) => x.c);
 }
 
 // ---------------------------------------------------------------------------
