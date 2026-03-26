@@ -47,6 +47,7 @@ export interface MatchResult {
   sfOptOutNotes: string;
   matchMethod: 'exact' | 'name_match' | 'fuzzy' | 'no_match';
   matchConfidence: 'high' | 'medium' | 'low' | '';
+  sfMatchedDomain: string; // the Sheet15 domain that was actually matched
 }
 
 export interface EnrichedRow {

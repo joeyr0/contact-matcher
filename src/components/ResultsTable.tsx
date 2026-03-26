@@ -19,6 +19,8 @@ import type { EnrichedRow } from '../lib/types';
 type FlatRow = Record<string, string>;
 
 const ENRICHED_HEADERS = [
+  'contact_website',
+  'sf_website',
   'sf_account_name',
   'sf_account_id',
   'sf_account_owner',
@@ -46,11 +48,13 @@ type MatchMethodFilter = 'exact' | 'name_match' | 'fuzzy' | 'no_match';
 // ---------------------------------------------------------------------------
 
 function toFlatRows(headers: string[], results: EnrichedRow[]): FlatRow[] {
-  return results.map(({ originalRow, match }) => {
+  return results.map(({ originalRow, domain, match }) => {
     const row: FlatRow = {};
     headers.forEach((h, i) => {
       row[h] = originalRow[i] ?? '';
     });
+    row['contact_website'] = domain;
+    row['sf_website'] = match.sfMatchedDomain;
     row['sf_account_name'] = match.sfAccountName;
     row['sf_account_id'] = match.sfAccountId;
     row['sf_account_owner'] = match.sfAccountOwner;
@@ -147,6 +151,30 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     }));
 
     const enrichedCols: ColumnDef<FlatRow>[] = [
+      {
+        id: 'contact_website',
+        header: 'contact_website',
+        accessorFn: (row) => row['contact_website'] ?? '',
+        cell: (info) => (
+          <span className="font-mono text-xs text-gray-600">{info.getValue<string>()}</span>
+        ),
+      },
+      {
+        id: 'sf_website',
+        header: 'sf_website',
+        accessorFn: (row) => row['sf_website'] ?? '',
+        cell: (info) => {
+          const sfWebsite = info.getValue<string>();
+          const contactWebsite = info.row.original['contact_website'] ?? '';
+          const confidence = info.row.original['match_confidence'] ?? '';
+          const mismatch = sfWebsite && sfWebsite !== contactWebsite && (confidence === 'medium' || confidence === 'low');
+          return (
+            <span className={`font-mono text-xs ${mismatch ? 'rounded bg-amber-100 px-1 text-amber-800' : 'text-gray-600'}`}>
+              {sfWebsite}
+            </span>
+          );
+        },
+      },
       {
         id: 'sf_account_name',
         header: 'sf_account_name',

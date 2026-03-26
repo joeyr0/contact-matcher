@@ -17,6 +17,7 @@ const NO_MATCH: MatchResult = {
   sfOptOutNotes: '',
   matchMethod: 'no_match',
   matchConfidence: '',
+  sfMatchedDomain: '',
 };
 
 export function matchDomain(
@@ -53,6 +54,7 @@ export function matchDomain(
     sfOptOutNotes: optOutMatch?.notes ?? '',
     matchMethod: 'exact',
     matchConfidence: 'high',
+    sfMatchedDomain: domain,
   };
 }
 
