@@ -32,15 +32,16 @@ const ENRICHED_HEADERS = [
 ] as const;
 
 const CONFIDENCE_ORDER: Record<string, number> = { high: 3, medium: 2, low: 1, '': 0 };
-const METHOD_ORDER: Record<string, number> = { exact: 3, fuzzy: 2, no_match: 1, '': 0 };
+const METHOD_ORDER: Record<string, number> = { exact: 4, name_match: 3, fuzzy: 2, no_match: 1, '': 0 };
 
 const METHOD_BADGE: Record<string, string> = {
   exact: 'bg-green-100 text-green-800',
+  name_match: 'bg-blue-100 text-blue-800',
   fuzzy: 'bg-yellow-100 text-yellow-800',
   no_match: 'bg-gray-100 text-gray-500',
 };
 
-type MatchMethodFilter = 'exact' | 'fuzzy' | 'no_match';
+type MatchMethodFilter = 'exact' | 'name_match' | 'fuzzy' | 'no_match';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -235,6 +236,7 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
   // Stats (computed from all flat rows, not filtered)
   const stats = useMemo(() => ({
     exact: flatRows.filter((r) => r['match_method'] === 'exact').length,
+    nameMatch: flatRows.filter((r) => r['match_method'] === 'name_match').length,
     fuzzy: flatRows.filter((r) => r['match_method'] === 'fuzzy').length,
     noMatch: flatRows.filter((r) => r['match_method'] === 'no_match').length,
     optedOut: flatRows.filter((r) => r['sf_opt_out'] === 'TRUE').length,
@@ -290,7 +292,7 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
         {/* Match method filter */}
         <div className="flex items-center gap-1.5 text-sm">
           <span className="text-gray-500">Method:</span>
-          {(['exact', 'fuzzy', 'no_match'] as MatchMethodFilter[]).map((m) => (
+          {(['exact', 'name_match', 'fuzzy', 'no_match'] as MatchMethodFilter[]).map((m) => (
             <button
               key={m}
               onClick={() => toggleMethod(m)}
@@ -361,6 +363,11 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
         <span className="text-green-700">
           <span className="font-semibold">{stats.exact.toLocaleString()}</span> exact
         </span>
+        {stats.nameMatch > 0 && (
+          <span className="text-blue-700">
+            <span className="font-semibold">{stats.nameMatch.toLocaleString()}</span> name match
+          </span>
+        )}
         {stats.fuzzy > 0 && (
           <span className="text-yellow-700">
             <span className="font-semibold">{stats.fuzzy.toLocaleString()}</span> fuzzy

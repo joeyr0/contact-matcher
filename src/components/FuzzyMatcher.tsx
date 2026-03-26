@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { isGenericDomain } from '../lib/normalize';
 import type { EnrichedRow, FuzzyBatchResult, MatchResult } from '../lib/types';
 
@@ -18,14 +18,14 @@ export default function FuzzyMatcher({ results, onFuzzyUpdates }: FuzzyMatcherPr
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const cancelledRef = useRef(false);
 
-  // Unique unmatched non-generic domains
-  const unmatchedDomains = [
+  // Unique unmatched non-generic domains — memoized so it doesn't recompute on every render
+  const unmatchedDomains = useMemo(() => [
     ...new Set(
       results
         .filter((r) => r.match.matchMethod === 'no_match' && r.domain && !isGenericDomain(r.domain))
         .map((r) => r.domain),
     ),
-  ];
+  ], [results]);
 
   const totalBatches = Math.ceil(unmatchedDomains.length / BATCH_SIZE);
 
@@ -51,11 +51,19 @@ export default function FuzzyMatcher({ results, onFuzzyUpdates }: FuzzyMatcherPr
       const batch = unmatchedDomains.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
 
       try {
-        const res = await fetch('/api/fuzzy-match', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domains: batch }),
-        });
+        const controller = new AbortController();
+        const fetchTimeout = setTimeout(() => controller.abort(), 25000);
+        let res: Response;
+        try {
+          res = await fetch('/api/fuzzy-match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ domains: batch }),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(fetchTimeout);
+        }
 
         if (!res.ok) {
           console.warn(`[fuzzy] Batch ${i + 1} HTTP error: ${res.status}`);
@@ -81,7 +89,7 @@ export default function FuzzyMatcher({ results, onFuzzyUpdates }: FuzzyMatcherPr
     }
 
     if (allBatchesFailed && totalBatches > 0) {
-      setErrorMsg('All fuzzy matching batches failed. Check that OPENAI_API_KEY is set in .env');
+      setErrorMsg('All fuzzy matching batches failed. Check that OPENAI_API_KEY is set in your .env file.');
       setState('error');
     } else {
       setState('complete');

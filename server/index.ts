@@ -11,6 +11,7 @@ import { normalizeDomain } from '../src/lib/normalize.js';
 import { extractDomain, matchDomain } from '../src/lib/matcher.js';
 import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
+import { matchByName, buildAccountNameIndex } from '../src/lib/matcher.js';
 import type { Sheet15Index, OptOutIndex, EnrichedRow, FuzzyBatchResult } from '../src/lib/types.js';
 
 const app = express();
@@ -46,6 +47,7 @@ function writeJSON(name: string, data: unknown) {
 let _sheet15Cache: Sheet15Index | null = null;
 let _optOutCache: OptOutIndex | null = null;
 let _domainLookupCache: DomainLookup | null = null;
+let _accountNameIndexCache: Map<string, string> | null = null;
 
 function getSheet15Index(): Sheet15Index | null {
   if (!_sheet15Cache) _sheet15Cache = readJSON<Sheet15Index>('sheet15-index.json');
@@ -65,16 +67,26 @@ function getDomainLookup(): DomainLookup | null {
   return _domainLookupCache;
 }
 
+function getAccountNameIndex(): Map<string, string> | null {
+  if (!_accountNameIndexCache) {
+    const idx = getSheet15Index();
+    if (idx) _accountNameIndexCache = buildAccountNameIndex(idx);
+  }
+  return _accountNameIndexCache;
+}
+
 function invalidateCache() {
   _sheet15Cache = null;
   _optOutCache = null;
   _domainLookupCache = null;
+  _accountNameIndexCache = null;
 }
 
 // Pre-warm cache at startup so first request is fast
 getSheet15Index();
 getOptOutIndex();
 getDomainLookup();
+getAccountNameIndex();
 
 // ---------------------------------------------------------------------------
 // POST /api/reference/upload?type=sheet15|optout
@@ -242,17 +254,47 @@ app.post('/api/fuzzy-match', async (req, res) => {
     return;
   }
 
+  // ---------------------------------------------------------------------------
+  // Tier 1.5: Name-based matching — zero API calls, instant
+  // ---------------------------------------------------------------------------
+  const nameIndex = getAccountNameIndex();
+  const validatedMatches: FuzzyBatchResult['matches'] = {};
+  const matched = new Set<string>();
+  const needsLLM: string[] = [];
+
+  if (nameIndex) {
+    for (const domain of validDomains) {
+      const nameMatch = matchByName(domain, nameIndex, sheet15Index, optOutIndex);
+      if (nameMatch) {
+        validatedMatches[domain] = nameMatch;
+        matched.add(domain);
+      } else {
+        needsLLM.push(domain);
+      }
+    }
+  } else {
+    needsLLM.push(...validDomains);
+  }
+
+  // If all resolved by name matching, skip LLM entirely
+  if (needsLLM.length === 0) {
+    res.json({ matches: validatedMatches, failedDomains: [] } as FuzzyBatchResult);
+    return;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tier 2: LLM fuzzy matching for remaining unmatched domains
+  // ---------------------------------------------------------------------------
   const lookup = getDomainLookup();
   if (!lookup) {
     res.status(503).json({ error: 'Reference data not loaded' });
     return;
   }
-  const rawCandidates = getFastCandidates(validDomains, lookup);
-  const candidates = rankAndLimitCandidates(validDomains, rawCandidates, 200);
+  const rawCandidates = getFastCandidates(needsLLM, lookup);
+  const candidates = rankAndLimitCandidates(needsLLM, rawCandidates, 200);
 
   if (candidates.length === 0) {
-    const result: FuzzyBatchResult = { matches: {}, failedDomains: validDomains };
-    res.json(result);
+    res.json({ matches: validatedMatches, failedDomains: needsLLM } as FuzzyBatchResult);
     return;
   }
 
@@ -263,34 +305,26 @@ app.post('/api/fuzzy-match', async (req, res) => {
   }
 
   const client = new OpenAI({ apiKey });
-  const { system, user } = buildFuzzyPrompt(validDomains, candidates);
+  const { system, user } = buildFuzzyPrompt(needsLLM, candidates);
 
-  let responseText: string;
+  let responseText = '';
   try {
-    let lastErr: unknown;
-    responseText = '';
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const completion = await client.chat.completions.create({
-          model: 'gpt-4o-mini',
-          max_tokens: 1024,
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: user },
-          ],
-        });
-        responseText = completion.choices[0]?.message?.content ?? '';
-        break;
-      } catch (e) {
-        lastErr = e;
-        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 500));
-      }
+    // Single attempt with 15s timeout — gpt-4o-mini is reliable, retries add more freeze than they save
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    try {
+      const completion = await client.chat.completions.create(
+        { model: 'gpt-4o-mini', max_tokens: 1024, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },
+        { signal: controller.signal },
+      );
+      responseText = completion.choices[0]?.message?.content ?? '';
+    } finally {
+      clearTimeout(timeoutId);
     }
-    if (!responseText) throw lastErr;
   } catch (e) {
     const result: FuzzyBatchResult = {
-      matches: {},
-      failedDomains: validDomains,
+      matches: validatedMatches,
+      failedDomains: needsLLM,
       error: `LLM call failed: ${String(e)}`,
     };
     res.json(result);
@@ -298,8 +332,6 @@ app.post('/api/fuzzy-match', async (req, res) => {
   }
 
   const { matches: llmMatches } = parseFuzzyResponse(responseText);
-  const validatedMatches: FuzzyBatchResult['matches'] = {};
-  const matched = new Set<string>();
 
   for (const { unmatchedDomain, matchedDomain, confidence } of llmMatches) {
     if (!sheet15Index[matchedDomain]) {
@@ -311,11 +343,10 @@ app.post('/api/fuzzy-match', async (req, res) => {
     matched.add(unmatchedDomain);
   }
 
-  const result: FuzzyBatchResult = {
+  res.json({
     matches: validatedMatches,
     failedDomains: validDomains.filter((d) => !matched.has(d)),
-  };
-  res.json(result);
+  } as FuzzyBatchResult);
 });
 
 // ---------------------------------------------------------------------------
