@@ -315,7 +315,6 @@ app.post('/api/fuzzy-match', async (req, res) => {
   // ---------------------------------------------------------------------------
   // Tier 1.7: Company name matching
   // ---------------------------------------------------------------------------
-  const nameIndex = getAccountNameIndex();
   const needsLLMAfterCompany: string[] = [];
   for (const domain of needsLLMAfterRedirect) {
     const companyName = companyNames[domain] ?? '';
