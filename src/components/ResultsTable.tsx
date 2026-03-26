@@ -2,11 +2,9 @@ import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import {
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
-  type FilterFn,
   type SortingState,
   type VisibilityState,
 } from '@tanstack/react-table';
@@ -78,12 +76,6 @@ function exportCSV(allHeaders: string[], rows: FlatRow[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
-// Custom filter fn for match method multi-select
-const methodFilterFn: FilterFn<FlatRow> = (row, columnId, filterValue: MatchMethodFilter[]) => {
-  if (!filterValue || filterValue.length === 0) return true;
-  return filterValue.includes(row.getValue<string>(columnId) as MatchMethodFilter);
-};
-methodFilterFn.autoRemove = (val: MatchMethodFilter[]) => !val || val.length === 0;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -121,13 +113,27 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
   const allHeaders = [...headers, ...ENRICHED_HEADERS];
   const flatRows = useMemo(() => toFlatRows(headers, results), [headers, results]);
 
-  // Pre-filter for opt-out filter (done before table to keep column filter simple)
-  const preFiltered = useMemo(() => {
-    if (optOutFilter === 'opted_out') return flatRows.filter((r) => r['sf_opt_out'] === 'TRUE');
-    if (optOutFilter === 'specific_only')
-      return flatRows.filter((r) => r['sf_opt_out_specific_contacts'] === 'TRUE');
-    return flatRows;
-  }, [flatRows, optOutFilter]);
+  // All filtering happens here — outside TanStack entirely so it can't block the render pipeline
+  const filteredRows = useMemo(() => {
+    let rows = flatRows;
+
+    if (optOutFilter === 'opted_out')
+      rows = rows.filter((r) => r['sf_opt_out'] === 'TRUE');
+    else if (optOutFilter === 'specific_only')
+      rows = rows.filter((r) => r['sf_opt_out_specific_contacts'] === 'TRUE');
+
+    if (methodFilter.length > 0)
+      rows = rows.filter((r) => methodFilter.includes(r['match_method'] as MatchMethodFilter));
+
+    if (globalFilter) {
+      const lf = globalFilter.toLowerCase();
+      rows = rows.filter((r) =>
+        Object.values(r).some((v) => v && String(v).toLowerCase().includes(lf)),
+      );
+    }
+
+    return rows;
+  }, [flatRows, optOutFilter, methodFilter, globalFilter]);
 
   // Column definitions
   const columns = useMemo((): ColumnDef<FlatRow>[] => {
@@ -192,7 +198,6 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
         sortingFn: (a, b) =>
           (METHOD_ORDER[a.getValue<string>('match_method')] ?? 0) -
           (METHOD_ORDER[b.getValue<string>('match_method')] ?? 0),
-        filterFn: methodFilterFn,
         cell: (info) => {
           const val = info.getValue<string>();
           return (
@@ -218,26 +223,17 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
   }, [headers]);
 
   const table = useReactTable({
-    data: preFiltered,
+    data: filteredRows,
     columns,
-    state: {
-      sorting,
-      globalFilter,
-      columnVisibility,
-      columnFilters: methodFilter.length > 0 ? [{ id: 'match_method', value: methodFilter }] : [],
-    },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
+    state: { sorting, columnVisibility },
+    onSortingChange: (updater) => startTransition(() => setSorting(updater)),
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    globalFilterFn: 'includesString',
-    filterFns: { methodFilterFn },
   });
 
   const { rows } = table.getRowModel();
-  const totalFiltered = rows.length;
+  const totalFiltered = filteredRows.length;
   const totalAll = flatRows.length;
 
   // Stats (computed from all flat rows, not filtered)
