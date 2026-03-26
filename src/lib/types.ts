@@ -45,7 +45,7 @@ export interface MatchResult {
   sfOptOut: string; // 'TRUE' | 'FALSE' | ''
   sfOptOutSpecificContacts: string; // 'TRUE' | 'FALSE' | ''
   sfOptOutNotes: string;
-  matchMethod: 'exact' | 'name_match' | 'fuzzy' | 'no_match';
+  matchMethod: 'exact' | 'redirect' | 'name_match' | 'fuzzy' | 'no_match';
   matchConfidence: 'high' | 'medium' | 'low' | '';
   sfMatchedDomain: string; // the Sheet15 domain that was actually matched
 }

@@ -10,6 +10,7 @@ import { parseContactCSV } from '../src/lib/csv.js';
 import { normalizeDomain } from '../src/lib/normalize.js';
 import { extractDomain, matchDomain } from '../src/lib/matcher.js';
 import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
+import { checkRedirects } from '../src/lib/redirect.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
 import { matchByName, buildAccountNameIndex } from '../src/lib/matcher.js';
 import type { Sheet15Index, OptOutIndex, EnrichedRow, FuzzyBatchResult } from '../src/lib/types.js';
@@ -276,8 +277,32 @@ app.post('/api/fuzzy-match', async (req, res) => {
     needsLLM.push(...validDomains);
   }
 
-  // If all resolved by name matching, skip LLM entirely
+  // If all resolved by name matching, skip everything else
   if (needsLLM.length === 0) {
+    res.json({ matches: validatedMatches, failedDomains: [] } as FuzzyBatchResult);
+    return;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tier 1.6: Redirect check — parallel HEAD requests, 3s timeout each
+  // e.g. stakek.it → yield.xyz (in Sheet15 as StakeKit) → high confidence match
+  // ---------------------------------------------------------------------------
+  const redirectMap = await checkRedirects(needsLLM);
+  const needsLLMAfterRedirect: string[] = [];
+  for (const domain of needsLLM) {
+    const redirectedDomain = redirectMap.get(domain);
+    if (redirectedDomain) {
+      const base = matchDomain(redirectedDomain, sheet15Index, optOutIndex);
+      if (base.matchMethod !== 'no_match') {
+        validatedMatches[domain] = { ...base, matchMethod: 'redirect', matchConfidence: 'high' };
+        matched.add(domain);
+        continue;
+      }
+    }
+    needsLLMAfterRedirect.push(domain);
+  }
+
+  if (needsLLMAfterRedirect.length === 0) {
     res.json({ matches: validatedMatches, failedDomains: [] } as FuzzyBatchResult);
     return;
   }
@@ -290,8 +315,8 @@ app.post('/api/fuzzy-match', async (req, res) => {
     res.status(503).json({ error: 'Reference data not loaded' });
     return;
   }
-  const rawCandidates = getFastCandidates(needsLLM, lookup);
-  const candidates = rankAndLimitCandidates(needsLLM, rawCandidates, 200);
+  const rawCandidates = getFastCandidates(needsLLMAfterRedirect, lookup);
+  const candidates = rankAndLimitCandidates(needsLLMAfterRedirect, rawCandidates, 200);
 
   if (candidates.length === 0) {
     res.json({ matches: validatedMatches, failedDomains: needsLLM } as FuzzyBatchResult);
@@ -305,7 +330,7 @@ app.post('/api/fuzzy-match', async (req, res) => {
   }
 
   const client = new OpenAI({ apiKey });
-  const { system, user } = buildFuzzyPrompt(needsLLM, candidates);
+  const { system, user } = buildFuzzyPrompt(needsLLMAfterRedirect, candidates);
 
   let responseText = '';
   try {
@@ -344,7 +369,7 @@ app.post('/api/fuzzy-match', async (req, res) => {
 
   res.json({
     matches: validatedMatches,
-    failedDomains: validDomains.filter((d) => !matched.has(d)),
+    failedDomains: needsLLMAfterRedirect.filter((d) => !matched.has(d)),
   } as FuzzyBatchResult);
 });
 

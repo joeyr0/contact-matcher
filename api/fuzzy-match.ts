@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
+import { checkRedirects } from '../src/lib/redirect.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
 import { matchByName, buildAccountNameIndex } from '../src/lib/matcher.js';
 import { matchDomain } from '../src/lib/matcher.js';
@@ -55,16 +56,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // ---------------------------------------------------------------------------
+  // Tier 1.6: Redirect check — parallel HEAD requests, 3s timeout each
+  // ---------------------------------------------------------------------------
+  const redirectMap = await checkRedirects(needsLLM);
+  const needsLLMAfterRedirect: string[] = [];
+  for (const domain of needsLLM) {
+    const redirectedDomain = redirectMap.get(domain);
+    if (redirectedDomain) {
+      const base = matchDomain(redirectedDomain, sheet15Index, optOutIndex);
+      if (base.matchMethod !== 'no_match') {
+        validatedMatches[domain] = { ...base, matchMethod: 'redirect', matchConfidence: 'high' };
+        matched.add(domain);
+        continue;
+      }
+    }
+    needsLLMAfterRedirect.push(domain);
+  }
+
+  if (needsLLMAfterRedirect.length === 0) {
+    return res.status(200).json({ matches: validatedMatches, failedDomains: [] } as FuzzyBatchResult);
+  }
+
+  // ---------------------------------------------------------------------------
   // Tier 2: LLM fuzzy matching for remaining unmatched domains
   // ---------------------------------------------------------------------------
   if (!_domainLookupCache) {
     _domainLookupCache = buildDomainLookup(Object.keys(sheet15Index));
   }
-  const rawCandidates = getFastCandidates(needsLLM, _domainLookupCache);
-  const candidates = rankAndLimitCandidates(needsLLM, rawCandidates, 200);
+  const rawCandidates = getFastCandidates(needsLLMAfterRedirect, _domainLookupCache);
+  const candidates = rankAndLimitCandidates(needsLLMAfterRedirect, rawCandidates, 200);
 
   if (candidates.length === 0) {
-    return res.status(200).json({ matches: validatedMatches, failedDomains: needsLLM } as FuzzyBatchResult);
+    return res.status(200).json({ matches: validatedMatches, failedDomains: needsLLMAfterRedirect } as FuzzyBatchResult);
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -73,7 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const client = new OpenAI({ apiKey });
-  const { system, user } = buildFuzzyPrompt(needsLLM, candidates);
+  const { system, user } = buildFuzzyPrompt(needsLLMAfterRedirect, candidates);
 
   let responseText = '';
   try {
@@ -110,6 +133,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   return res.status(200).json({
     matches: validatedMatches,
-    failedDomains: validDomains.filter((d) => !matched.has(d)),
+    failedDomains: needsLLMAfterRedirect.filter((d) => !matched.has(d)),
   } as FuzzyBatchResult);
 }
