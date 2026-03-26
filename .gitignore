@@ -12,8 +12,8 @@ dist
 dist-ssr
 *.local
 
-# Local reference data (re-upload via UI after cloning)
-data/
+# Keep pre-built indexes; exclude only temp uploads
+data/uploads/
 
 # Environment variables
 .env
