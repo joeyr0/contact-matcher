@@ -79,7 +79,7 @@ export function buildAccountNameIndex(sheet15Index: Sheet15Index): Map<string, s
   for (const [domain, record] of Object.entries(sheet15Index)) {
     if (!record.accountName) continue;
     const normalized = normalizeAccountName(record.accountName);
-    if (normalized.length >= 5 && !nameIndex.has(normalized)) {
+    if (normalized.length >= 7 && !nameIndex.has(normalized)) {
       nameIndex.set(normalized, domain);
     }
   }
@@ -104,7 +104,7 @@ export function matchByName(
   const effectiveRoot = innerDot !== -1 ? root.slice(innerDot + 1) : root;
 
   const normalizedRoot = normalizeAccountName(effectiveRoot);
-  if (normalizedRoot.length < 5) return null;
+  if (normalizedRoot.length < 7) return null;
 
   const matchedDomain = nameIndex.get(normalizedRoot);
   if (!matchedDomain || matchedDomain === unmatchedDomain) return null;
