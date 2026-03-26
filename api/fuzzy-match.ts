@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
 import { matchByName, buildAccountNameIndex } from '../src/lib/matcher.js';
@@ -67,12 +67,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ matches: validatedMatches, failedDomains: needsLLM } as FuzzyBatchResult);
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'OPENAI_API_KEY not configured.' });
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured.' });
   }
 
-  const client = new OpenAI({ apiKey });
+  const client = new Anthropic({ apiKey });
   const { system, user } = buildFuzzyPrompt(needsLLM, candidates);
 
   let responseText = '';
@@ -80,11 +80,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
-      const completion = await client.chat.completions.create(
-        { model: 'gpt-4o-mini', max_tokens: 1024, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },
+      const msg = await client.messages.create(
+        { model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system, messages: [{ role: 'user', content: user }] },
         { signal: controller.signal },
       );
-      responseText = completion.choices[0]?.message?.content ?? '';
+      responseText = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
     } finally {
       clearTimeout(timeoutId);
     }

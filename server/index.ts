@@ -3,7 +3,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import formidable from 'formidable';
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 
 import { buildSheet15Index, buildOptOutIndex } from '../src/lib/indexer.js';
 import { parseContactCSV } from '../src/lib/csv.js';
@@ -298,26 +298,25 @@ app.post('/api/fuzzy-match', async (req, res) => {
     return;
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    res.status(500).json({ error: 'OPENAI_API_KEY not set in .env' });
+    res.status(500).json({ error: 'ANTHROPIC_API_KEY not set in .env' });
     return;
   }
 
-  const client = new OpenAI({ apiKey });
+  const client = new Anthropic({ apiKey });
   const { system, user } = buildFuzzyPrompt(needsLLM, candidates);
 
   let responseText = '';
   try {
-    // Single attempt with 15s timeout — gpt-4o-mini is reliable, retries add more freeze than they save
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
-      const completion = await client.chat.completions.create(
-        { model: 'gpt-4o-mini', max_tokens: 1024, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },
+      const msg = await client.messages.create(
+        { model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system, messages: [{ role: 'user', content: user }] },
         { signal: controller.signal },
       );
-      responseText = completion.choices[0]?.message?.content ?? '';
+      responseText = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
     } finally {
       clearTimeout(timeoutId);
     }
