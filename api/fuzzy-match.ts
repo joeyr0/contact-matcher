@@ -138,7 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     return res.status(200).json({
       matches: validatedMatches,
-      failedDomains: needsLLM,
+      failedDomains: needsLLMAfterCompany,
       error: `LLM call failed: ${String(err)}`,
     } as FuzzyBatchResult);
   }
