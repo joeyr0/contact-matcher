@@ -52,10 +52,16 @@ function UploadZone({ label, description, type, status, onUploadComplete }: Uplo
           body: formData,
         });
 
-        const data = (await res.json()) as UploadResponse;
+        let data: UploadResponse;
+        try {
+          data = (await res.json()) as UploadResponse;
+        } catch {
+          setError(`HTTP ${res.status} — server returned a non-JSON response. Check that Vercel Blob storage is configured.`);
+          return;
+        }
 
         if (!res.ok || !data.success) {
-          setError(data.error ?? 'Upload failed');
+          setError(data.error ?? `Upload failed (HTTP ${res.status})`);
         } else {
           setSuccessMsg(
             `${data.rowCount.toLocaleString()} rows loaded (${data.uniqueDomains.toLocaleString()} unique domains)` +

@@ -47,9 +47,16 @@ export default function ContactUpload({
       }
 
       if (!response.ok) {
-        const body = await response.json().catch(() => ({ error: 'Unknown error' }));
+        let errorMsg = `HTTP ${response.status}`;
+        try {
+          const text = await response.text();
+          const body = JSON.parse(text) as { error?: string };
+          errorMsg = body.error ?? errorMsg;
+        } catch {
+          // non-JSON response (HTML error page, etc.)
+        }
         setUploading(false);
-        onError((body as { error?: string }).error ?? `HTTP ${response.status}`);
+        onError(errorMsg);
         return;
       }
 
