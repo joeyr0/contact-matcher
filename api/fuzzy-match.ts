@@ -3,8 +3,7 @@ import OpenAI from 'openai';
 import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import { checkRedirects } from '../src/lib/redirect.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
-import { matchByName, buildAccountNameIndex } from '../src/lib/matcher.js';
-import { matchDomain } from '../src/lib/matcher.js';
+import { matchByName, matchByCompanyName, buildAccountNameIndex, matchDomain } from '../src/lib/matcher.js';
 import { readDataJSON } from './lib/readData.js';
 import type { Sheet15Index, OptOutIndex, FuzzyBatchResult } from '../src/lib/types.js';
 
@@ -17,12 +16,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { domains } = req.body as { domains?: unknown };
+  const { domains, companyNames: rawCompanyNames } = req.body as { domains?: unknown; companyNames?: unknown };
   if (!Array.isArray(domains) || domains.length === 0) {
     return res.status(400).json({ error: 'domains must be a non-empty array' });
   }
 
   const validDomains = domains.filter((d): d is string => typeof d === 'string' && d.length > 0);
+  const companyNames: Record<string, string> = (rawCompanyNames && typeof rawCompanyNames === 'object' && !Array.isArray(rawCompanyNames))
+    ? rawCompanyNames as Record<string, string>
+    : {};
 
   const sheet15Index = readDataJSON<Sheet15Index>('sheet15-index.json');
   const optOutIndex = readDataJSON<OptOutIndex>('optout-index.json');
@@ -78,16 +80,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // ---------------------------------------------------------------------------
+  // Tier 1.7: Company name matching — explicit company name from contact row
+  // e.g. company = "Accenture" → nameIndex["accenture"] = "accenture.com" → medium confidence
+  // ---------------------------------------------------------------------------
+  const needsLLMAfterCompany: string[] = [];
+  for (const domain of needsLLMAfterRedirect) {
+    const companyName = companyNames[domain] ?? '';
+    if (companyName && _accountNameIndexCache) {
+      const companyMatch = matchByCompanyName(companyName, _accountNameIndexCache, sheet15Index, optOutIndex);
+      if (companyMatch) {
+        validatedMatches[domain] = companyMatch;
+        matched.add(domain);
+        continue;
+      }
+    }
+    needsLLMAfterCompany.push(domain);
+  }
+
+  if (needsLLMAfterCompany.length === 0) {
+    return res.status(200).json({ matches: validatedMatches, failedDomains: [] } as FuzzyBatchResult);
+  }
+
+  // ---------------------------------------------------------------------------
   // Tier 2: LLM fuzzy matching for remaining unmatched domains
   // ---------------------------------------------------------------------------
   if (!_domainLookupCache) {
     _domainLookupCache = buildDomainLookup(Object.keys(sheet15Index));
   }
-  const rawCandidates = getFastCandidates(needsLLMAfterRedirect, _domainLookupCache);
-  const candidates = rankAndLimitCandidates(needsLLMAfterRedirect, rawCandidates, 200);
+  const rawCandidates = getFastCandidates(needsLLMAfterCompany, _domainLookupCache);
+  const candidates = rankAndLimitCandidates(needsLLMAfterCompany, rawCandidates, 200);
 
   if (candidates.length === 0) {
-    return res.status(200).json({ matches: validatedMatches, failedDomains: needsLLMAfterRedirect } as FuzzyBatchResult);
+    return res.status(200).json({ matches: validatedMatches, failedDomains: needsLLMAfterCompany } as FuzzyBatchResult);
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -96,7 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const client = new OpenAI({ apiKey });
-  const { system, user } = buildFuzzyPrompt(needsLLMAfterRedirect, candidates);
+  const { system, user } = buildFuzzyPrompt(needsLLMAfterCompany, candidates);
 
   let responseText = '';
   try {
@@ -133,6 +157,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   return res.status(200).json({
     matches: validatedMatches,
-    failedDomains: needsLLMAfterRedirect.filter((d) => !matched.has(d)),
+    failedDomains: needsLLMAfterCompany.filter((d) => !matched.has(d)),
   } as FuzzyBatchResult);
 }

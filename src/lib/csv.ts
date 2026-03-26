@@ -6,6 +6,8 @@ export interface ParsedContactCSV {
   emailColIdx: number;
   /** If true, the detected column contains domains/URLs directly (not emails) */
   isDomainColumn: boolean;
+  /** Index of the company/organization name column, -1 if not found */
+  companyColIdx: number;
   error?: string;
 }
 
@@ -23,6 +25,23 @@ const EMAIL_HEADER_NAMES = new Set([
   'mail',
   'email id',
   'email_id',
+]);
+
+const COMPANY_HEADER_NAMES = new Set([
+  'company',
+  'company name',
+  'company_name',
+  'companyname',
+  'organization',
+  'organisation',
+  'org',
+  'account',
+  'account name',
+  'account_name',
+  'employer',
+  'firm',
+  'business',
+  'business name',
 ]);
 
 const DOMAIN_HEADER_NAMES = new Set([
@@ -52,7 +71,7 @@ export function parseContactCSV(csvText: string): ParsedContactCSV {
   });
 
   if (result.data.length === 0) {
-    return { headers: [], rows: [], emailColIdx: -1, isDomainColumn: false, error: 'CSV is empty' };
+    return { headers: [], rows: [], emailColIdx: -1, isDomainColumn: false, companyColIdx: -1, error: 'CSV is empty' };
   }
 
   // Find the real header row — some exports (e.g. Google Sheets) have metadata rows
@@ -74,23 +93,25 @@ export function parseContactCSV(csvText: string): ParsedContactCSV {
   const rows = allRows.slice(headerRowIdx + 1) as string[][];
 
   if (rows.length === 0) {
-    return { headers, rows, emailColIdx: -1, isDomainColumn: false, error: 'CSV contains no data rows' };
+    return { headers, rows, emailColIdx: -1, isDomainColumn: false, companyColIdx: -1, error: 'CSV contains no data rows' };
   }
+
+  const companyColIdx = headers.findIndex((h) => COMPANY_HEADER_NAMES.has(h.toLowerCase().trim()));
 
   // Step 1: email header match
   let emailColIdx = headers.findIndex((h) => EMAIL_HEADER_NAMES.has(h.toLowerCase().trim()));
-  if (emailColIdx !== -1) return { headers, rows, emailColIdx, isDomainColumn: false };
+  if (emailColIdx !== -1) return { headers, rows, emailColIdx, isDomainColumn: false, companyColIdx };
 
   // Step 2: domain/website header match
   const domainColIdx = headers.findIndex((h) => DOMAIN_HEADER_NAMES.has(h.toLowerCase().trim()));
-  if (domainColIdx !== -1) return { headers, rows, emailColIdx: domainColIdx, isDomainColumn: true };
+  if (domainColIdx !== -1) return { headers, rows, emailColIdx: domainColIdx, isDomainColumn: true, companyColIdx };
 
   // Step 3: scan first 10 rows for @ signs (email column)
   const sample = rows.slice(0, 10);
   for (let colIdx = 0; colIdx < headers.length; colIdx++) {
     const atCount = sample.filter((row) => row[colIdx]?.includes('@')).length;
     if (sample.length > 0 && atCount / sample.length > 0.5) {
-      return { headers, rows, emailColIdx: colIdx, isDomainColumn: false };
+      return { headers, rows, emailColIdx: colIdx, isDomainColumn: false, companyColIdx };
     }
   }
 
@@ -100,7 +121,7 @@ export function parseContactCSV(csvText: string): ParsedContactCSV {
       (row) => row[colIdx]?.includes('.') && !row[colIdx]?.includes('@'),
     ).length;
     if (sample.length > 0 && dotCount / sample.length > 0.5) {
-      return { headers, rows, emailColIdx: colIdx, isDomainColumn: true };
+      return { headers, rows, emailColIdx: colIdx, isDomainColumn: true, companyColIdx };
     }
   }
 
@@ -109,6 +130,7 @@ export function parseContactCSV(csvText: string): ParsedContactCSV {
     rows,
     emailColIdx: -1,
     isDomainColumn: false,
+    companyColIdx,
     error:
       'Could not detect an email or website column. Add a column header like "email", "website", or "domain".',
   };

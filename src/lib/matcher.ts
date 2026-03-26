@@ -86,6 +86,38 @@ export function buildAccountNameIndex(sheet15Index: Sheet15Index): Map<string, s
   return nameIndex;
 }
 
+// Generic crypto/finance words that survive normalizeAccountName but are too common to match on
+const COMPANY_MATCH_BLOCKLIST = new Set([
+  'genesis', 'balance', 'polygon', 'trading', 'exchange', 'markets',
+  'staking', 'bitcoin', 'ethereum', 'blockchain', 'venture', 'funding',
+  'lending', 'borrowing', 'custody', 'clearing', 'settlement',
+]);
+
+/**
+ * Tier 1.7: match an unmatched domain using an explicit company name from the contact row.
+ * e.g. company = "Accenture" → normalized "accenture" → nameIndex["accenture"] = "accenture.com"
+ * Only exact normalized matches; no partial matching.
+ */
+export function matchByCompanyName(
+  companyName: string,
+  nameIndex: Map<string, string>,
+  sheet15Index: Sheet15Index,
+  optOutIndex: OptOutIndex,
+): MatchResult | null {
+  if (!companyName) return null;
+  const normalized = normalizeAccountName(companyName);
+  if (normalized.length < 7) return null;
+  if (COMPANY_MATCH_BLOCKLIST.has(normalized)) return null;
+
+  const matchedDomain = nameIndex.get(normalized);
+  if (!matchedDomain) return null;
+
+  const base = matchDomain(matchedDomain, sheet15Index, optOutIndex);
+  if (base.matchMethod === 'no_match') return null;
+
+  return { ...base, matchMethod: 'company_match', matchConfidence: 'medium' };
+}
+
 /**
  * Tier 1.5: try to match an unmatched domain by its root name against account names.
  * e.g. blockaid.io → root "blockaid" → nameIndex["blockaid"] = "blockaid.co" → match.

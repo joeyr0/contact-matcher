@@ -50,15 +50,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
-  const { headers, rows, emailColIdx, isDomainColumn } = parsed;
+  const { headers, rows, emailColIdx, isDomainColumn, companyColIdx } = parsed;
   const results: EnrichedRow[] = [];
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rawValue = (row[emailColIdx] ?? '').trim();
     const domain = isDomainColumn ? normalizeDomain(rawValue) : extractDomain(rawValue);
+    const companyName = companyColIdx >= 0 ? (row[companyColIdx] ?? '').trim() : '';
     const match = matchDomain(domain, sheet15Index, optOutIndex);
-    results.push({ originalRow: row, domain, match });
+    results.push({ originalRow: row, domain, companyName, match });
 
     if ((i + 1) % 50 === 0 || i === rows.length - 1) {
       send({ type: 'progress', processed: i + 1, total: rows.length });

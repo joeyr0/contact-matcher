@@ -27,6 +27,17 @@ export default function FuzzyMatcher({ results, onFuzzyUpdates }: FuzzyMatcherPr
     ),
   ], [results]);
 
+  // Map of domain → company name for unmatched rows (used for Tier 1.7 company name matching)
+  const companyNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const r of results) {
+      if (r.match.matchMethod === 'no_match' && r.domain && r.companyName) {
+        map[r.domain] = r.companyName;
+      }
+    }
+    return map;
+  }, [results]);
+
   const totalBatches = Math.ceil(unmatchedDomains.length / BATCH_SIZE);
 
   const runFuzzyMatch = useCallback(async () => {
@@ -58,7 +69,7 @@ export default function FuzzyMatcher({ results, onFuzzyUpdates }: FuzzyMatcherPr
           res = await fetch('/api/fuzzy-match', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ domains: batch }),
+            body: JSON.stringify({ domains: batch, companyNames }),
             signal: controller.signal,
           });
         } finally {

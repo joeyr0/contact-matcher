@@ -11,6 +11,7 @@ import { normalizeDomain } from '../src/lib/normalize.js';
 import { extractDomain, matchDomain } from '../src/lib/matcher.js';
 import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import { checkRedirects } from '../src/lib/redirect.js';
+import { matchByCompanyName } from '../src/lib/matcher.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
 import { matchByName, buildAccountNameIndex } from '../src/lib/matcher.js';
 import type { Sheet15Index, OptOutIndex, EnrichedRow, FuzzyBatchResult } from '../src/lib/types.js';
@@ -216,14 +217,15 @@ app.post('/api/match/stream', (req, res) => {
 
     const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
-    const { headers, rows, emailColIdx, isDomainColumn } = parsed;
+    const { headers, rows, emailColIdx, isDomainColumn, companyColIdx } = parsed;
     const results: EnrichedRow[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const rawValue = (rows[i]?.[emailColIdx] ?? '').trim();
       const domain = isDomainColumn ? normalizeDomain(rawValue) : extractDomain(rawValue);
+      const companyName = companyColIdx >= 0 ? (rows[i]?.[companyColIdx] ?? '').trim() : '';
       const match = matchDomain(domain, sheet15Index, optOutIndex);
-      results.push({ originalRow: rows[i] ?? [], domain, match });
+      results.push({ originalRow: rows[i] ?? [], domain, companyName, match });
 
       if ((i + 1) % 50 === 0 || i === rows.length - 1) {
         send({ type: 'progress', processed: i + 1, total: rows.length });
@@ -240,13 +242,16 @@ app.post('/api/match/stream', (req, res) => {
 // ---------------------------------------------------------------------------
 
 app.post('/api/fuzzy-match', async (req, res) => {
-  const { domains } = req.body as { domains?: unknown };
+  const { domains, companyNames: rawCompanyNames } = req.body as { domains?: unknown; companyNames?: unknown };
   if (!Array.isArray(domains) || domains.length === 0) {
     res.status(400).json({ error: 'domains must be a non-empty array' });
     return;
   }
 
   const validDomains = domains.filter((d): d is string => typeof d === 'string' && d.length > 0);
+  const companyNames: Record<string, string> = (rawCompanyNames && typeof rawCompanyNames === 'object' && !Array.isArray(rawCompanyNames))
+    ? rawCompanyNames as Record<string, string>
+    : {};
 
   const sheet15Index = getSheet15Index();
   const optOutIndex = getOptOutIndex();
@@ -308,6 +313,29 @@ app.post('/api/fuzzy-match', async (req, res) => {
   }
 
   // ---------------------------------------------------------------------------
+  // Tier 1.7: Company name matching
+  // ---------------------------------------------------------------------------
+  const nameIndex = getAccountNameIndex();
+  const needsLLMAfterCompany: string[] = [];
+  for (const domain of needsLLMAfterRedirect) {
+    const companyName = companyNames[domain] ?? '';
+    if (companyName && nameIndex) {
+      const companyMatch = matchByCompanyName(companyName, nameIndex, sheet15Index, optOutIndex);
+      if (companyMatch) {
+        validatedMatches[domain] = companyMatch;
+        matched.add(domain);
+        continue;
+      }
+    }
+    needsLLMAfterCompany.push(domain);
+  }
+
+  if (needsLLMAfterCompany.length === 0) {
+    res.json({ matches: validatedMatches, failedDomains: [] } as FuzzyBatchResult);
+    return;
+  }
+
+  // ---------------------------------------------------------------------------
   // Tier 2: LLM fuzzy matching for remaining unmatched domains
   // ---------------------------------------------------------------------------
   const lookup = getDomainLookup();
@@ -315,11 +343,11 @@ app.post('/api/fuzzy-match', async (req, res) => {
     res.status(503).json({ error: 'Reference data not loaded' });
     return;
   }
-  const rawCandidates = getFastCandidates(needsLLMAfterRedirect, lookup);
-  const candidates = rankAndLimitCandidates(needsLLMAfterRedirect, rawCandidates, 200);
+  const rawCandidates = getFastCandidates(needsLLMAfterCompany, lookup);
+  const candidates = rankAndLimitCandidates(needsLLMAfterCompany, rawCandidates, 200);
 
   if (candidates.length === 0) {
-    res.json({ matches: validatedMatches, failedDomains: needsLLM } as FuzzyBatchResult);
+    res.json({ matches: validatedMatches, failedDomains: needsLLMAfterCompany } as FuzzyBatchResult);
     return;
   }
 
@@ -330,7 +358,7 @@ app.post('/api/fuzzy-match', async (req, res) => {
   }
 
   const client = new OpenAI({ apiKey });
-  const { system, user } = buildFuzzyPrompt(needsLLMAfterRedirect, candidates);
+  const { system, user } = buildFuzzyPrompt(needsLLMAfterCompany, candidates);
 
   let responseText = '';
   try {
@@ -348,7 +376,7 @@ app.post('/api/fuzzy-match', async (req, res) => {
   } catch (e) {
     const result: FuzzyBatchResult = {
       matches: validatedMatches,
-      failedDomains: needsLLM,
+      failedDomains: needsLLMAfterCompany,
       error: `LLM call failed: ${String(e)}`,
     };
     res.json(result);
@@ -369,7 +397,7 @@ app.post('/api/fuzzy-match', async (req, res) => {
 
   res.json({
     matches: validatedMatches,
-    failedDomains: needsLLMAfterRedirect.filter((d) => !matched.has(d)),
+    failedDomains: needsLLMAfterCompany.filter((d) => !matched.has(d)),
   } as FuzzyBatchResult);
 });
 
