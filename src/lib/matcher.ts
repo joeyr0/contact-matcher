@@ -1,4 +1,4 @@
-import { normalizeDomain, isGenericDomain } from './normalize';
+import { normalizeDomain, isGenericDomain } from './normalize.js';
 import type { Sheet15Index, OptOutIndex, MatchResult } from './types';
 
 export function extractDomain(email: string): string {

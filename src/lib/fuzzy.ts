@@ -1,4 +1,4 @@
-import { normalizeDomain } from './normalize';
+import { normalizeDomain } from './normalize.js';
 
 // ---------------------------------------------------------------------------
 // Fast candidate lookup — O(1) per domain via pre-built indexes

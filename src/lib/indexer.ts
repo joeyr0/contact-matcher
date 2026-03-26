@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import { normalizeDomain, parseMultiDomain } from './normalize';
+import { normalizeDomain, parseMultiDomain } from './normalize.js';
 import type { Sheet15Index, OptOutIndex, Sheet15Record, OptOutRecord } from './types';
 
 export interface ParseResult<T> {

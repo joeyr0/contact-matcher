@@ -4,17 +4,15 @@
  */
 import fs from 'fs';
 import path from 'path';
-
-// __dirname is available because @vercel/node compiles to CommonJS via esbuild.
-// api/lib/readData.ts -> ../../data = project_root/data
-declare const __dirname: string;
+import { fileURLToPath } from 'url';
 
 function getDataDir(): string {
-  // Primary: relative to this compiled file (works on Vercel)
+  // Primary: relative to this file (api/lib/ -> ../../data = project_root/data)
   try {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const relative = path.resolve(__dirname, '../../data');
     if (fs.existsSync(relative)) return relative;
-  } catch { /* __dirname unavailable */ }
+  } catch { /* import.meta.url unavailable in CJS */ }
 
   // Fallback: cwd-relative (works locally with Express)
   return path.join(process.cwd(), 'data');
