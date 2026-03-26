@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, startTransition } from 'react';
 import ReferenceDataManager from './components/ReferenceDataManager';
 import ContactUpload from './components/ContactUpload';
 import MatchProgress from './components/MatchProgress';
@@ -37,10 +37,12 @@ export default function App() {
   };
 
   const handleComplete = (headers: string[], rows: EnrichedRow[]) => {
-    setResultHeaders(headers);
-    setResults(rows);
+    // Show "complete" state immediately; defer the heavy results render
     setMatchState('complete');
-    setTab('match');
+    startTransition(() => {
+      setResultHeaders(headers);
+      setResults(rows);
+    });
   };
 
   const handleError = (error: string) => {

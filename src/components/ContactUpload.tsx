@@ -86,7 +86,9 @@ export default function ContactUpload({
             if (event.type === 'progress') {
               onProgress(event.processed, event.total);
             } else if (event.type === 'complete') {
-              onComplete(event.headers, event.results);
+              // Defer outside the read loop so the stream finishes before React renders
+              const { headers: h, results: r } = event;
+              setTimeout(() => onComplete(h, r), 0);
             } else if (event.type === 'error') {
               onError(event.error);
             }
