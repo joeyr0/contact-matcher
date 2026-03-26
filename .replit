@@ -1,10 +1,7 @@
-run = "npm run dev"
+run = "npm install && npx concurrently -n vite,api -c blue,green \"npx vite --host\" \"npx tsx watch server/index.ts\""
 
 [nix]
 channel = "stable-24_05"
-
-[deployment]
-run = ["sh", "-c", "npm run dev"]
 
 [[ports]]
 localPort = 5173
