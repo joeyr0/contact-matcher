@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -101,7 +101,14 @@ interface ResultsTableProps {
 
 export default function ResultsTable({ headers, results, onReset }: ResultsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [filterInput, setFilterInput] = useState('');
   const [globalFilter, setGlobalFilter] = useState('');
+
+  // Debounce: only run TanStack's expensive filter after 150ms of no typing
+  useEffect(() => {
+    const t = setTimeout(() => startTransition(() => setGlobalFilter(filterInput)), 150);
+    return () => clearTimeout(t);
+  }, [filterInput]);
   const [methodFilter, setMethodFilter] = useState<MatchMethodFilter[]>([]);
   const [optOutFilter, setOptOutFilter] = useState<'all' | 'opted_out' | 'specific_only'>('all');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
@@ -264,17 +271,22 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
   const today = new Date().toISOString().slice(0, 10);
 
   const toggleMethod = (m: MatchMethodFilter) =>
-    setMethodFilter((prev) =>
-      prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m],
+    startTransition(() =>
+      setMethodFilter((prev) =>
+        prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m],
+      ),
     );
 
   const clearFilters = () => {
-    setMethodFilter([]);
-    setOptOutFilter('all');
-    setGlobalFilter('');
+    setFilterInput('');
+    startTransition(() => {
+      setMethodFilter([]);
+      setOptOutFilter('all');
+      setGlobalFilter('');
+    });
   };
 
-  const hasFilters = methodFilter.length > 0 || optOutFilter !== 'all' || globalFilter !== '';
+  const hasFilters = methodFilter.length > 0 || optOutFilter !== 'all' || filterInput !== '';
 
   return (
     <div className="space-y-3">
@@ -284,8 +296,8 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
         <input
           type="text"
           placeholder="Search all columns…"
-          value={globalFilter}
-          onChange={(e) => setGlobalFilter(e.target.value)}
+          value={filterInput}
+          onChange={(e) => setFilterInput(e.target.value)}
           className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
         />
 
@@ -310,7 +322,7 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
           <span className="text-gray-500">Opt-out:</span>
           <select
             value={optOutFilter}
-            onChange={(e) => setOptOutFilter(e.target.value as typeof optOutFilter)}
+            onChange={(e) => startTransition(() => setOptOutFilter(e.target.value as typeof optOutFilter))}
             className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none"
           >
             <option value="all">All</option>
