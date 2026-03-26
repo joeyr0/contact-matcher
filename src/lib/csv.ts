@@ -55,8 +55,23 @@ export function parseContactCSV(csvText: string): ParsedContactCSV {
     return { headers: [], rows: [], emailColIdx: -1, isDomainColumn: false, error: 'CSV is empty' };
   }
 
-  const headers = result.data[0] as string[];
-  const rows = result.data.slice(1) as string[][];
+  // Find the real header row — some exports (e.g. Google Sheets) have metadata rows
+  // at the top before the actual column headers. Scan up to 5 rows to find one that
+  // contains a known email or domain header word.
+  let headerRowIdx = 0;
+  const allRows = result.data as string[][];
+  for (let i = 0; i < Math.min(5, allRows.length); i++) {
+    const row = allRows[i];
+    const hasEmailHeader = row.some((cell) => EMAIL_HEADER_NAMES.has(cell.toLowerCase().trim()));
+    const hasDomainHeader = row.some((cell) => DOMAIN_HEADER_NAMES.has(cell.toLowerCase().trim()));
+    if (hasEmailHeader || hasDomainHeader) {
+      headerRowIdx = i;
+      break;
+    }
+  }
+
+  const headers = allRows[headerRowIdx] as string[];
+  const rows = allRows.slice(headerRowIdx + 1) as string[][];
 
   if (rows.length === 0) {
     return { headers, rows, emailColIdx: -1, isDomainColumn: false, error: 'CSV contains no data rows' };
