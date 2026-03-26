@@ -39,6 +39,32 @@ function writeJSON(name: string, data: unknown) {
 }
 
 // ---------------------------------------------------------------------------
+// In-memory index cache — loaded once at startup, invalidated on upload
+// ---------------------------------------------------------------------------
+
+let _sheet15Cache: Sheet15Index | null = null;
+let _optOutCache: OptOutIndex | null = null;
+
+function getSheet15Index(): Sheet15Index | null {
+  if (!_sheet15Cache) _sheet15Cache = readJSON<Sheet15Index>('sheet15-index.json');
+  return _sheet15Cache;
+}
+
+function getOptOutIndex(): OptOutIndex | null {
+  if (!_optOutCache) _optOutCache = readJSON<OptOutIndex>('optout-index.json');
+  return _optOutCache;
+}
+
+function invalidateCache() {
+  _sheet15Cache = null;
+  _optOutCache = null;
+}
+
+// Pre-warm cache at startup so first request is fast
+getSheet15Index();
+getOptOutIndex();
+
+// ---------------------------------------------------------------------------
 // POST /api/reference/upload?type=sheet15|optout
 // ---------------------------------------------------------------------------
 
@@ -80,6 +106,7 @@ app.post('/api/reference/upload', (req, res) => {
 
     const blobKey = type === 'sheet15' ? 'sheet15-index.json' : 'optout-index.json';
     writeJSON(blobKey, parseResult.index);
+    invalidateCache();
 
     const existing = readJSON<Record<string, unknown>>('metadata.json') ?? {};
     (existing as Record<string, unknown>)[type] = {
@@ -150,8 +177,8 @@ app.post('/api/match/stream', (req, res) => {
     if (columnMode === 'email') parsed.isDomainColumn = false;
     if (columnMode === 'website') parsed.isDomainColumn = true;
 
-    const sheet15Index = readJSON<Sheet15Index>('sheet15-index.json');
-    const optOutIndex = readJSON<OptOutIndex>('optout-index.json');
+    const sheet15Index = getSheet15Index();
+    const optOutIndex = getOptOutIndex();
     if (!sheet15Index || !optOutIndex) {
       res.status(503).json({ error: 'Reference data not loaded. Upload both CSVs first.' });
       return;
@@ -196,8 +223,8 @@ app.post('/api/fuzzy-match', async (req, res) => {
 
   const validDomains = domains.filter((d): d is string => typeof d === 'string' && d.length > 0);
 
-  const sheet15Index = readJSON<Sheet15Index>('sheet15-index.json');
-  const optOutIndex = readJSON<OptOutIndex>('optout-index.json');
+  const sheet15Index = getSheet15Index();
+  const optOutIndex = getOptOutIndex();
   if (!sheet15Index || !optOutIndex) {
     res.status(503).json({ error: 'Reference data not loaded' });
     return;
