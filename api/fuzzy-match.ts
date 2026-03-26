@@ -1,9 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
-import { getNgramCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
+import { buildDomainLookup, getFastCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
+import type { DomainLookup } from '../src/lib/fuzzy.js';
 import { matchDomain } from '../src/lib/matcher.js';
 import { readDataJSON } from './lib/readData.js';
 import type { Sheet15Index, OptOutIndex, FuzzyBatchResult } from '../src/lib/types.js';
+
+// Module-level cache — survives across warm invocations on the same Lambda instance
+let _domainLookupCache: DomainLookup | null = null;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -23,8 +27,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(503).json({ error: 'Reference data not available.' });
   }
 
-  const allReferenceDomains = Object.keys(sheet15Index);
-  const candidates = getNgramCandidates(validDomains, allReferenceDomains);
+  if (!_domainLookupCache) {
+    _domainLookupCache = buildDomainLookup(Object.keys(sheet15Index));
+  }
+  const candidates = getFastCandidates(validDomains, _domainLookupCache);
 
   if (candidates.length === 0) {
     return res.status(200).json({ matches: {}, failedDomains: validDomains } as FuzzyBatchResult);

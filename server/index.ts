@@ -9,7 +9,8 @@ import { buildSheet15Index, buildOptOutIndex } from '../src/lib/indexer.js';
 import { parseContactCSV } from '../src/lib/csv.js';
 import { normalizeDomain } from '../src/lib/normalize.js';
 import { extractDomain, matchDomain } from '../src/lib/matcher.js';
-import { getNgramCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
+import { buildDomainLookup, getFastCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
+import type { DomainLookup } from '../src/lib/fuzzy.js';
 import type { Sheet15Index, OptOutIndex, EnrichedRow, FuzzyBatchResult } from '../src/lib/types.js';
 
 const app = express();
@@ -44,6 +45,7 @@ function writeJSON(name: string, data: unknown) {
 
 let _sheet15Cache: Sheet15Index | null = null;
 let _optOutCache: OptOutIndex | null = null;
+let _domainLookupCache: DomainLookup | null = null;
 
 function getSheet15Index(): Sheet15Index | null {
   if (!_sheet15Cache) _sheet15Cache = readJSON<Sheet15Index>('sheet15-index.json');
@@ -55,14 +57,24 @@ function getOptOutIndex(): OptOutIndex | null {
   return _optOutCache;
 }
 
+function getDomainLookup(): DomainLookup | null {
+  if (!_domainLookupCache) {
+    const idx = getSheet15Index();
+    if (idx) _domainLookupCache = buildDomainLookup(Object.keys(idx));
+  }
+  return _domainLookupCache;
+}
+
 function invalidateCache() {
   _sheet15Cache = null;
   _optOutCache = null;
+  _domainLookupCache = null;
 }
 
 // Pre-warm cache at startup so first request is fast
 getSheet15Index();
 getOptOutIndex();
+getDomainLookup();
 
 // ---------------------------------------------------------------------------
 // POST /api/reference/upload?type=sheet15|optout
@@ -230,8 +242,12 @@ app.post('/api/fuzzy-match', async (req, res) => {
     return;
   }
 
-  const allReferenceDomains = Object.keys(sheet15Index);
-  const candidates = getNgramCandidates(validDomains, allReferenceDomains);
+  const lookup = getDomainLookup();
+  if (!lookup) {
+    res.status(503).json({ error: 'Reference data not loaded' });
+    return;
+  }
+  const candidates = getFastCandidates(validDomains, lookup);
 
   if (candidates.length === 0) {
     const result: FuzzyBatchResult = { matches: {}, failedDomains: validDomains };
