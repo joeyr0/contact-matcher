@@ -123,6 +123,32 @@ export interface CompactScoreRow {
   >;
 }
 
+export interface OutboundCandidate {
+  key: string;
+  firstName: string;
+  fullName: string;
+  title: string;
+  email: string;
+  company: string;
+  domain: string;
+  accountPriority: 'p0' | 'p1' | 'p2';
+  contactPriority: 'high' | 'medium' | 'low';
+  leadPriority: 'direct' | 'queue';
+  primaryUseCase: string;
+  icpReasonSummary: string;
+  contactReasonSummary: string;
+  roleFit: string;
+}
+
+export interface OutboundDraft {
+  key: string;
+  subject: string;
+  email1: string;
+  email2: string;
+  linkedinMessage: string;
+  rationale: string;
+}
+
 export type MatchStreamEvent =
   | { type: 'progress'; processed: number; total: number }
   | { type: 'complete'; headers: string[]; results: EnrichedRow[]; error?: never }
@@ -131,6 +157,11 @@ export type MatchStreamEvent =
 export type IcpScoreStreamEvent =
   | { type: 'progress'; stage: 'companies' | 'contacts'; processed: number; total: number }
   | { type: 'complete'; results: EnrichedRow[]; error?: never }
+  | { type: 'error'; error: string };
+
+export type OutboundStreamEvent =
+  | { type: 'progress'; processed: number; total: number }
+  | { type: 'complete'; drafts: OutboundDraft[]; error?: never }
   | { type: 'error'; error: string };
 
 export interface FuzzyBatchRequest {
