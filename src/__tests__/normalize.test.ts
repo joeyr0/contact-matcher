@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { parseContactCSV } from '../lib/csv';
 import { normalizeDomain, isGenericDomain, parseMultiDomain } from '../lib/normalize';
 
 describe('normalizeDomain', () => {
@@ -56,6 +57,19 @@ describe('normalizeDomain', () => {
 
   it('strips protocol and port', () => {
     expect(normalizeDomain('http://example.com:3000/path')).toBe('example.com');
+  });
+});
+
+describe('parseContactCSV company header detection', () => {
+  it('detects question-style company headers', () => {
+    const csv = [
+      'name,email,Domain,What company do you work for?,What is your job title?',
+      'Alex,alex@native.inc,native.inc,Native,Head of Partnerships',
+    ].join('\n');
+
+    const parsed = parseContactCSV(csv);
+    expect(parsed.companyColIdx).toBe(3);
+    expect(parsed.emailColIdx).toBe(1);
   });
 });
 

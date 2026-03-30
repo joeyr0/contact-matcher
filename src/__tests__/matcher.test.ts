@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractDomain, matchDomain } from '../lib/matcher';
+import { extractDomain, matchDomain, findPossibleCustomerMatch, getCustomerLookup } from '../lib/matcher';
 import type { Sheet15Index, OptOutIndex, CommittedArrIndex } from '../lib/types';
 
 // --- extractDomain ---
@@ -297,5 +297,25 @@ describe('matchDomain — possible customer review quarantine', () => {
     expect(result.possibleCustomerConfidence).toBe('low');
     expect(result.possibleCustomerReason).toContain('Native Markets Inc');
     expect(result.sfOptOut).toBe('FALSE');
+  });
+});
+
+describe('findPossibleCustomerMatch — no Salesforce match path', () => {
+  it('quarantines a likely customer based on company/domain similarity alone', () => {
+    const arr: CommittedArrIndex = {
+      'cus_native_markets': {
+        customerId: 'cus_native_markets',
+        customerName: 'Native Markets Inc',
+        accountOwner: 'Owner',
+        subscriptionStatus: 'active',
+        isActiveCustomer: true,
+        customerTier: 'Enterprise',
+      },
+    };
+
+    const lookup = getCustomerLookup(arr);
+    const possible = findPossibleCustomerMatch(lookup, 'Native', 'native.inc');
+    expect(possible).not.toBeNull();
+    expect(possible?.record.customerName).toBe('Native Markets Inc');
   });
 });

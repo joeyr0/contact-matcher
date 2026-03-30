@@ -30,7 +30,7 @@ const NO_MATCH: MatchResult = {
   sfMatchedDomain: '',
 };
 
-interface CustomerLookup {
+export interface CustomerLookup {
   activeByCanonicalName: Map<string, CommittedArrIndex[string]>;
   activeCustomers: Array<{
     record: CommittedArrIndex[string];
@@ -41,7 +41,7 @@ interface CustomerLookup {
 
 const customerLookupCache = new WeakMap<CommittedArrIndex, CustomerLookup>();
 
-function canonicalizeCustomerName(name: string): string {
+export function canonicalizeCustomerName(name: string): string {
   return normalizeAccountName(
     name
       .replace(/\((prod|production|dev|development|staging|stage|testing|test|sandbox)\)/gi, ' ')
@@ -49,7 +49,7 @@ function canonicalizeCustomerName(name: string): string {
   );
 }
 
-function getDomainRoot(domain: string): string {
+export function getDomainRoot(domain: string): string {
   const dot = domain.lastIndexOf('.');
   const root = dot !== -1 ? domain.slice(0, dot) : domain;
   const innerDot = root.lastIndexOf('.');
@@ -115,7 +115,7 @@ function choosePreferredCustomer(
   return current;
 }
 
-function getCustomerLookup(arrIndex: CommittedArrIndex): CustomerLookup {
+export function getCustomerLookup(arrIndex: CommittedArrIndex): CustomerLookup {
   const cached = customerLookupCache.get(arrIndex);
   if (cached) return cached;
 
@@ -141,7 +141,7 @@ function getCustomerLookup(arrIndex: CommittedArrIndex): CustomerLookup {
   return lookup;
 }
 
-function findPossibleCustomerMatch(
+export function findPossibleCustomerMatch(
   customerLookup: CustomerLookup,
   accountName: string,
   domain: string,

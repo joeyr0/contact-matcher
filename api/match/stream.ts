@@ -3,7 +3,7 @@ import formidable from 'formidable';
 import fs from 'fs';
 import { parseContactCSV } from '../../src/lib/csv.js';
 import { normalizeDomain } from '../../src/lib/normalize.js';
-import { extractDomain, matchDomain } from '../../src/lib/matcher.js';
+import { extractDomain, matchDomain, getCustomerLookup, findPossibleCustomerMatch } from '../../src/lib/matcher.js';
 import { readDataJSON } from '../lib/readData.js';
 import type { Sheet15Index, OptOutIndex, CommittedArrIndex, EnrichedRow } from '../../src/lib/types.js';
 
@@ -53,6 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { headers, rows, emailColIdx, isDomainColumn, companyColIdx } = parsed;
   const results: EnrichedRow[] = [];
+  const customerLookup = arrIndex ? getCustomerLookup(arrIndex) : null;
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -60,6 +61,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const domain = isDomainColumn ? normalizeDomain(rawValue) : extractDomain(rawValue);
     const companyName = companyColIdx >= 0 ? (row[companyColIdx] ?? '').trim() : '';
     const match = matchDomain(domain, sheet15Index, optOutIndex, arrIndex);
+
+    if (
+      customerLookup &&
+      match.matchMethod === 'no_match' &&
+      match.isActiveCustomer !== 'TRUE'
+    ) {
+      const possibleCustomer = findPossibleCustomerMatch(customerLookup, companyName, domain);
+      if (possibleCustomer) {
+        match.possibleCustomer = 'TRUE';
+        match.possibleCustomerConfidence = possibleCustomer.confidence;
+        match.possibleCustomerReason = `${possibleCustomer.reason}: ${possibleCustomer.record.customerName}`;
+        match.arrCustomerName = possibleCustomer.record.customerName;
+        match.customerTier = possibleCustomer.record.customerTier;
+        match.stripeSubscriptionStatus = possibleCustomer.record.subscriptionStatus;
+      }
+    }
+
     results.push({ originalRow: row, domain, companyName, match });
 
     if ((i + 1) % 50 === 0 || i === rows.length - 1) {

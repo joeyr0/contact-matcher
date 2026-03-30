@@ -44,6 +44,24 @@ const COMPANY_HEADER_NAMES = new Set([
   'business name',
 ]);
 
+function normalizeHeader(header: string): string {
+  return header.toLowerCase().trim().replace(/[^a-z0-9]+/g, ' ');
+}
+
+function isCompanyHeader(header: string): boolean {
+  const normalized = normalizeHeader(header);
+  if (COMPANY_HEADER_NAMES.has(normalized)) return true;
+
+  return (
+    normalized.includes('company') ||
+    normalized.includes('organization') ||
+    normalized.includes('organisation') ||
+    normalized.includes('employer') ||
+    normalized.includes('where do you work') ||
+    normalized.includes('work for')
+  );
+}
+
 const DOMAIN_HEADER_NAMES = new Set([
   'website',
   'web site',
@@ -96,7 +114,7 @@ export function parseContactCSV(csvText: string): ParsedContactCSV {
     return { headers, rows, emailColIdx: -1, isDomainColumn: false, companyColIdx: -1, error: 'CSV contains no data rows' };
   }
 
-  const companyColIdx = headers.findIndex((h) => COMPANY_HEADER_NAMES.has(h.toLowerCase().trim()));
+  const companyColIdx = headers.findIndex((h) => isCompanyHeader(h));
 
   // Step 1: email header match
   let emailColIdx = headers.findIndex((h) => EMAIL_HEADER_NAMES.has(h.toLowerCase().trim()));
