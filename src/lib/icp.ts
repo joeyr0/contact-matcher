@@ -70,7 +70,6 @@ const KNOWN_COMPETITOR_NAMES = [
   'pay protocol',
   'trilema wallet',
   'tin foil',
-  'bitgo',
 ].map((value) => canonicalizeCustomerName(value));
 
 const KNOWN_COMPETITOR_DOMAINS = new Set([
@@ -104,7 +103,6 @@ const KNOWN_COMPETITOR_DOMAINS = new Set([
   'payprotocol.xyz',
   'trilema.com',
   'tinfoil.sh',
-  'bitgo.com',
 ]);
 
 const OBVIOUS_EXCLUDE_TITLE_PATTERNS = [

@@ -74,6 +74,10 @@ describe('isKnownCompetitor', () => {
     expect(isKnownCompetitor('Coinbase', 'gmail.com')).toBe(false);
     expect(isKnownCompetitor('Coinbase CDP', 'gmail.com')).toBe(true);
   });
+
+  it('does not force adjacent infrastructure players into competitor bucket', () => {
+    expect(isKnownCompetitor('BitGo', 'bitgo.com')).toBe(false);
+  });
 });
 
 describe('classifyAccountRoute', () => {
