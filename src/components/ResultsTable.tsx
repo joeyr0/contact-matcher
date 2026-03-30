@@ -69,6 +69,7 @@ type MatchMethodFilter = 'exact' | 'redirect' | 'name_match' | 'company_match' |
 type LeadFilter = 'all' | 'direct' | 'queue' | 'hold' | 'do_not_outreach';
 type AccountPriorityFilter = 'all' | 'p0' | 'p1' | 'p2' | 'not_target' | 'excluded';
 type TableView = 'matching' | 'scoring';
+type DetailMode = 'compact' | 'detailed';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -129,6 +130,115 @@ function exportCSV(allHeaders: string[], rows: FlatRow[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function normalizeHeader(header: string): string {
+  return header.toLowerCase().trim().replace(/[^a-z0-9]+/g, ' ');
+}
+
+function isLikelyPersonNameHeader(header: string): boolean {
+  const normalized = normalizeHeader(header);
+  return ['name', 'full name', 'contact', 'contact name', 'first name', 'last name'].includes(normalized);
+}
+
+function isLikelyTitleHeader(header: string): boolean {
+  const normalized = normalizeHeader(header);
+  return ['title', 'job title', 'role', 'position', 'current title'].includes(normalized);
+}
+
+function isLikelyCompanyHeader(header: string): boolean {
+  const normalized = normalizeHeader(header);
+  return [
+    'company',
+    'company name',
+    'organization',
+    'organisation',
+    'employer',
+    'account name',
+    'what company do you work for',
+  ].includes(normalized);
+}
+
+function isLikelyEmailHeader(header: string): boolean {
+  return normalizeHeader(header) === 'email';
+}
+
+function isLikelyWebsiteHeader(header: string): boolean {
+  const normalized = normalizeHeader(header);
+  return normalized === 'website' || normalized === 'domain' || normalized.includes('website') || normalized.includes('domain');
+}
+
+function buildVisibilityPreset(headers: string[], tableView: TableView, detailMode: DetailMode): VisibilityState {
+  const visibility: VisibilityState = {};
+
+  headers.forEach((header) => {
+    if (detailMode === 'detailed') {
+      visibility[header] = true;
+      return;
+    }
+
+    visibility[header] =
+      isLikelyPersonNameHeader(header) ||
+      isLikelyTitleHeader(header) ||
+      isLikelyCompanyHeader(header) ||
+      isLikelyEmailHeader(header) ||
+      isLikelyWebsiteHeader(header);
+  });
+
+  ENRICHED_HEADERS.forEach((header) => {
+    visibility[header] = false;
+  });
+
+  visibility['contact_website'] = true;
+  visibility['sf_account_name'] = true;
+  visibility['sf_account_owner'] = true;
+  visibility['sf_opt_out'] = true;
+  visibility['is_customer'] = true;
+
+  if (tableView === 'matching') {
+    visibility['sf_website'] = detailMode === 'detailed';
+    visibility['match_confidence'] = true;
+    visibility['match_method'] = detailMode === 'detailed';
+    visibility['customer_match_confidence'] = true;
+    visibility['customer_match_method'] = detailMode === 'detailed';
+    visibility['sf_opt_out_specific_contacts'] = detailMode === 'detailed';
+    visibility['sf_opt_out_notes'] = detailMode === 'detailed';
+    visibility['possible_customer_reason'] = detailMode === 'detailed';
+    visibility['customer_tier'] = detailMode === 'detailed';
+    visibility['stripe_subscription_status'] = detailMode === 'detailed';
+    visibility['arr_customer_name'] = detailMode === 'detailed';
+  } else {
+    visibility['lead_priority'] = true;
+    visibility['account_priority'] = true;
+    visibility['icp_score'] = true;
+    visibility['primary_use_case'] = true;
+    visibility['contact_priority'] = true;
+    visibility['account_status'] = detailMode === 'detailed';
+    visibility['icp_confidence'] = detailMode === 'detailed';
+    visibility['tvc_relevance'] = detailMode === 'detailed';
+    visibility['icp_reason_summary'] = detailMode === 'detailed';
+    visibility['contact_score'] = detailMode === 'detailed';
+    visibility['role_fit'] = detailMode === 'detailed';
+    visibility['contact_reason_summary'] = detailMode === 'detailed';
+    visibility['sf_website'] = detailMode === 'detailed';
+    visibility['match_confidence'] = detailMode === 'detailed';
+    visibility['match_method'] = detailMode === 'detailed';
+    visibility['customer_match_confidence'] = detailMode === 'detailed';
+    visibility['customer_match_method'] = detailMode === 'detailed';
+    visibility['possible_customer_reason'] = detailMode === 'detailed';
+    visibility['customer_tier'] = detailMode === 'detailed';
+    visibility['stripe_subscription_status'] = detailMode === 'detailed';
+    visibility['arr_customer_name'] = detailMode === 'detailed';
+    visibility['sf_opt_out_specific_contacts'] = detailMode === 'detailed';
+    visibility['sf_opt_out_notes'] = detailMode === 'detailed';
+    visibility['is_competitor'] = detailMode === 'detailed';
+  }
+
+  visibility['sf_account_id'] = false;
+  visibility['stripe_customer_id'] = false;
+  visibility['tk_customer_id'] = false;
+
+  return visibility;
+}
+
 
 // ---------------------------------------------------------------------------
 // Props
@@ -160,28 +270,10 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
   const [leadFilter, setLeadFilter] = useState<LeadFilter>('all');
   const [accountPriorityFilter, setAccountPriorityFilter] = useState<AccountPriorityFilter>('all');
   const [tableView, setTableView] = useState<TableView>('matching');
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    lead_priority: false,
-    account_status: false,
-    account_priority: false,
-    icp_score: false,
-    icp_confidence: false,
-    primary_use_case: false,
-    tvc_relevance: false,
-    sf_account_id: false,
-    tk_customer_id: false,
-    sf_opt_out_specific_contacts: false,
-    sf_opt_out_notes: false,
-    possible_customer_reason: false,
-    stripe_subscription_status: false,
-    arr_customer_name: false,
-    icp_reason_summary: false,
-    is_competitor: false,
-    contact_score: false,
-    contact_priority: false,
-    role_fit: false,
-    contact_reason_summary: false,
-  });
+  const [detailMode, setDetailMode] = useState<DetailMode>('compact');
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() =>
+    buildVisibilityPreset(headers, 'matching', 'compact'),
+  );
   const [showColPicker, setShowColPicker] = useState(false);
 
   const allHeaders = [...headers, ...ENRICHED_HEADERS];
@@ -197,67 +289,11 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
       return;
     }
     setTableView('scoring');
-    setColumnVisibility((prev) => ({
-      ...prev,
-      lead_priority: false,
-      account_status: true,
-      account_priority: true,
-      icp_score: true,
-      icp_confidence: false,
-      primary_use_case: true,
-      tvc_relevance: false,
-      sf_account_name: true,
-      sf_opt_out: true,
-      is_customer: true,
-      contact_score: false,
-      contact_priority: true,
-      icp_reason_summary: false,
-      role_fit: false,
-      contact_reason_summary: false,
-      match_method: false,
-      match_confidence: false,
-      customer_match_method: false,
-      customer_match_confidence: false,
-    }));
   }, [hasScoring]);
 
   useEffect(() => {
-    if (tableView === 'matching') {
-      setColumnVisibility((prev) => ({
-        ...prev,
-        lead_priority: false,
-        account_status: false,
-        account_priority: false,
-        icp_score: false,
-        icp_confidence: false,
-        primary_use_case: false,
-        tvc_relevance: false,
-        contact_score: false,
-        contact_priority: false,
-        icp_reason_summary: false,
-        role_fit: false,
-        contact_reason_summary: false,
-        match_method: true,
-        match_confidence: true,
-        customer_match_method: true,
-        customer_match_confidence: true,
-      }));
-    } else {
-      setColumnVisibility((prev) => ({
-        ...prev,
-        lead_priority: true,
-        account_status: true,
-        account_priority: true,
-        icp_score: true,
-        primary_use_case: true,
-        contact_priority: true,
-        match_method: false,
-        match_confidence: false,
-        customer_match_method: false,
-        customer_match_confidence: false,
-      }));
-    }
-  }, [tableView]);
+    setColumnVisibility(buildVisibilityPreset(headers, tableView, detailMode));
+  }, [headers, tableView, detailMode]);
 
   // All filtering happens here — outside TanStack entirely so it can't block the render pipeline
   const filteredRows = useMemo(() => {
@@ -685,6 +721,21 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
           </div>
         )}
 
+        <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+          <button
+            onClick={() => setDetailMode('compact')}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium ${detailMode === 'compact' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Compact
+          </button>
+          <button
+            onClick={() => setDetailMode('detailed')}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium ${detailMode === 'detailed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Detailed
+          </button>
+        </div>
+
         {/* Match method filter */}
         <div className="flex items-center gap-1.5 text-sm">
           <span className="text-gray-500">Method:</span>
@@ -901,7 +952,7 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
             onClick={() => exportCSV(allHeaders, flatRows, `matched-contacts-${today}.csv`)}
             className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
           >
-            Export all ({totalAll.toLocaleString()})
+            Export full detail ({totalAll.toLocaleString()})
           </button>
           {hasFilters && totalFiltered !== totalAll && (
             <button
