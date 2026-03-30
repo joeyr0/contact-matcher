@@ -171,7 +171,6 @@ function normalizeScore(value: unknown): 1 | 2 | 3 | 4 | 5 {
 async function callOpenAIJson<T>(client: OpenAI, systemPrompt: string, userPayload: unknown): Promise<T> {
   const completion = await client.chat.completions.create({
     model: MODEL,
-    temperature: 0,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: systemPrompt },
