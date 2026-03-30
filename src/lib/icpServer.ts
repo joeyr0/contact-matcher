@@ -20,7 +20,7 @@ import {
   type ContactScoreResult,
 } from './icp';
 
-const MODEL = process.env.OPENAI_SCORING_MODEL || 'gpt-4.1-2025-04-14';
+const MODEL = process.env.OPENAI_SCORING_MODEL || 'gpt-5-mini';
 
 const COMPANY_BATCH_SIZE = 20;
 const CONTACT_BATCH_SIZE = 25;
