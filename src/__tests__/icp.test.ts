@@ -3,6 +3,7 @@ import {
   classifyAccountRoute,
   computeLeadPriority,
   isLowPriorityCommercialRole,
+  isSeniorConnectorTitle,
   isSeniorRelevantTitle,
   isKnownCompetitor,
   mapAccountPriority,
@@ -120,6 +121,14 @@ describe('priority mapping', () => {
     expect(isSeniorRelevantTitle('Director, Digital Assets Risk')).toBe(true);
     expect(isSeniorRelevantTitle('VP Partnerships')).toBe(false);
     expect(isSeniorRelevantTitle('Marketing Analyst')).toBe(false);
+  });
+
+  it('treats senior partnerships and BD leaders as connector candidates', () => {
+    expect(isSeniorConnectorTitle('VP Partnerships')).toBe(true);
+    expect(isSeniorConnectorTitle('Head of BD')).toBe(true);
+    expect(isSeniorConnectorTitle('Director of Business Development')).toBe(true);
+    expect(isSeniorConnectorTitle('Marketing Analyst')).toBe(false);
+    expect(isSeniorConnectorTitle('BDR')).toBe(false);
   });
 });
 

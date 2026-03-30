@@ -168,6 +168,13 @@ const RELEVANT_FUNCTION_TITLE_PATTERNS = [
   /\boperations?\b/i,
 ];
 
+const SENIOR_CONNECTOR_TITLE_PATTERNS = [
+  /\bpartnerships?\b/i,
+  /\bbd\b/i,
+  /\bbusiness development\b/i,
+  /\bbiz dev\b/i,
+];
+
 export interface AccountRoute {
   status: AccountStatus;
   isCompetitor: boolean;
@@ -340,6 +347,13 @@ export function isSeniorRelevantTitle(title: string): boolean {
   const hasSeniority = SENIOR_TITLE_PATTERNS.some((pattern) => pattern.test(title));
   if (!hasSeniority) return false;
   return RELEVANT_FUNCTION_TITLE_PATTERNS.some((pattern) => pattern.test(title));
+}
+
+export function isSeniorConnectorTitle(title: string): boolean {
+  if (!title) return false;
+  const hasSeniority = SENIOR_TITLE_PATTERNS.some((pattern) => pattern.test(title));
+  if (!hasSeniority) return false;
+  return SENIOR_CONNECTOR_TITLE_PATTERNS.some((pattern) => pattern.test(title));
 }
 
 export function computeLeadPriority(match: MatchResult): LeadPriority {

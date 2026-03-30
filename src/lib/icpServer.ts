@@ -11,6 +11,7 @@ import {
   getPreferredCompanyName,
   isLowPriorityCommercialRole,
   isObviousContactExclude,
+  isSeniorConnectorTitle,
   isSeniorRelevantTitle,
   mapAccountPriority,
   mapContactPriority,
@@ -127,7 +128,9 @@ IMPORTANT RULES
 - CTO, CEO, founder, VP/Head of Engineering, Head of Crypto, Head of Digital Assets often score 4-5.
 - Senior engineering, product, platform, payments, treasury, infrastructure leaders often score 3-4.
 - Senior security, cyber, risk, fraud, trust, compliance, and operations leaders at relevant accounts should usually score at least 4, not 3.
-- Marketing, general BD, general ops, finance, legal usually score 1-2 unless title strongly indicates crypto ownership.
+- Senior partnerships and business development leaders can be useful connectors at large strategic accounts and should usually score 3-4, not 1-2.
+- Marketing usually scores 1-2.
+- General junior BD, general ops, finance, legal usually score 1-2 unless title strongly indicates crypto ownership.
 - HR, recruiting, PR, office admin, interns, students should score 1.
 - Keep roleFit short, for example: decision_maker, engineering_leader, crypto_owner, product_influence, low_relevance, excluded_role.
 
@@ -394,6 +397,14 @@ export async function scoreEnrichedRows(
     }
 
     if (isLowPriorityCommercialRole(contact.title)) {
+      if (isSeniorConnectorTitle(contact.title)) {
+        row.match.contactScore = 4;
+        row.match.contactPriority = 'medium';
+        row.match.roleFit = 'senior_connector';
+        row.match.contactReasonSummary = 'Senior partnerships or business development leader at a relevant account.';
+        return;
+      }
+
       row.match.contactScore = 3;
       row.match.contactPriority = 'low';
       row.match.roleFit = 'commercial_low_priority';
