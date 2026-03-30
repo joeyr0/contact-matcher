@@ -33,6 +33,8 @@ CORE COPY PRINCIPLES
 - Keep the product mention to one concise sentence after the problem setup.
 - Avoid abstract contrasts unless they ring true for the company. If a phrase sounds clever but not real, do not use it.
 - Sound like a sharp operator who understands the problem, not a vendor reciting capabilities.
+- Avoid repetitive house-style openings. Do not default to the same pattern in every draft.
+- Specifically avoid overusing these structures: “Once X, then Y”, “As X scales”, “That is the layer we built Turnkey for”.
 - No hype, no vague platitudes, no “thought this might be relevant,” no “fits your roadmap,” no “would love to show you.”
 - No em dashes.
 - No bullets inside the email body.
@@ -47,14 +49,33 @@ CTA PRINCIPLES
 - LinkedIn should feel like a real note, not a compressed sales email.
 - LinkedIn should usually be 1-3 sentences, simple, direct, and lighter than the email.
 
+OPENING FRAMES
+Rotate across these frames so drafts do not all sound templated:
+
+1. observation
+- start with something true about the company's world
+- example: “Tokenized issuance looks straightforward from the outside. The hard part is the control layer underneath minting, approvals, and distribution.”
+
+2. tradeoff
+- name the real tension directly
+- example: “The tradeoff in consumer wallets is usually speed vs control. Most teams feel it once signing becomes part of the product experience.”
+
+3. category insight
+- make a sharp point about the category, then map it to the company
+- example: “A lot of payments teams can get stablecoin flows live. Fewer can do it without building manual approvals and reconciliation around the wallet layer.”
+
+4. operator lens
+- sound like someone who has seen the problem repeatedly
+- example: “What tends to break first is not the onchain piece. It is the operational layer around signing, approvals, and who is allowed to move what.”
+
 BANNER EXAMPLES
 
 Example: Securitize-style email
 Hi Carlos,
 
-Once issuance starts spanning multiple assets, counterparties, and approval paths, the control layer underneath minting becomes a real infrastructure decision.
+Tokenized issuance looks straightforward until the control layer underneath minting, approvals, and distribution starts getting more complex than the asset itself.
 
-That’s the piece we built Turnkey for: policy-enforced signing and audit trails around issuance workflows, so teams can tighten controls without slowing execution.
+Turnkey sits in that layer: policy-enforced signing and audit trails around issuance workflows, so teams can tighten controls without slowing execution.
 
 If helpful, would love to meet and share notes on how teams are handling that tradeoff.
 
@@ -68,9 +89,9 @@ Why this works:
 Example: Moonshot-style email
 Hi Ivan,
 
-At Moonshot’s scale, the wallet layer is not just about getting users in quickly. It is about keeping signing fast and reliable once volume spikes and transaction flow gets more demanding.
+The tradeoff in consumer wallets is usually speed vs control. It becomes more obvious once signing is part of the product experience and volume starts climbing at the same time.
 
-That is the layer we built Turnkey for: wallet infrastructure underneath the product experience, with the control and performance needed to keep UX sharp as usage grows.
+Turnkey sits underneath that layer: wallet infrastructure with the control and performance needed to keep UX sharp as usage grows.
 
 If helpful, would love to meet and share notes on how teams are handling that tradeoff.
 
@@ -83,10 +104,10 @@ Why this works:
 LINKEDIN EXAMPLES
 
 Securitize-style LinkedIn
-Hi Carlos, once issuance starts spanning more assets and approval paths, the control layer underneath minting becomes a real infrastructure decision. That is the layer we built Turnkey for. If helpful, would love to meet and share notes on how teams are handling that tradeoff.
+Hi Carlos, tokenized issuance gets a lot harder once the control layer underneath minting and approvals starts carrying more of the load. Turnkey sits in that layer. If helpful, would love to meet and share notes on how teams are handling that tradeoff.
 
 Moonshot-style LinkedIn
-Hi Ivan, at Moonshot’s scale the wallet layer is as much about keeping signing fast and reliable under volume as it is about UX. That is the layer we built Turnkey for. If helpful, would love to meet and share notes.
+Hi Ivan, the tradeoff in consumer wallets is usually speed vs control once signing becomes part of the product experience. Turnkey sits in that layer. If helpful, would love to meet and share notes.
 
 OUTPUT RULES
 - subject: short, human, specific
