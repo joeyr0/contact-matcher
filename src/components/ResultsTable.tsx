@@ -68,6 +68,7 @@ const METHOD_BADGE: Record<string, string> = {
 type MatchMethodFilter = 'exact' | 'redirect' | 'name_match' | 'company_match' | 'fuzzy' | 'no_match';
 type LeadFilter = 'all' | 'direct' | 'queue' | 'hold' | 'do_not_outreach';
 type AccountPriorityFilter = 'all' | 'p0' | 'p1' | 'p2' | 'not_target' | 'excluded';
+type TableView = 'matching' | 'scoring';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -158,7 +159,15 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
   const [customerFilter, setCustomerFilter] = useState<'all' | 'customers' | 'review' | 'prospects'>('all');
   const [leadFilter, setLeadFilter] = useState<LeadFilter>('all');
   const [accountPriorityFilter, setAccountPriorityFilter] = useState<AccountPriorityFilter>('all');
+  const [tableView, setTableView] = useState<TableView>('matching');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
+    lead_priority: false,
+    account_status: false,
+    account_priority: false,
+    icp_score: false,
+    icp_confidence: false,
+    primary_use_case: false,
+    tvc_relevance: false,
     sf_account_id: false,
     tk_customer_id: false,
     sf_opt_out_specific_contacts: false,
@@ -168,6 +177,8 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     arr_customer_name: false,
     icp_reason_summary: false,
     is_competitor: false,
+    contact_score: false,
+    contact_priority: false,
     role_fit: false,
     contact_reason_summary: false,
   });
@@ -175,6 +186,78 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
 
   const allHeaders = [...headers, ...ENRICHED_HEADERS];
   const flatRows = useMemo(() => toFlatRows(headers, results), [headers, results]);
+  const hasScoring = useMemo(
+    () => results.some((row) => row.match.accountPriority || row.match.leadPriority || row.match.contactPriority),
+    [results],
+  );
+
+  useEffect(() => {
+    if (!hasScoring) {
+      setTableView('matching');
+      return;
+    }
+    setTableView('scoring');
+    setColumnVisibility((prev) => ({
+      ...prev,
+      lead_priority: false,
+      account_status: true,
+      account_priority: true,
+      icp_score: true,
+      icp_confidence: false,
+      primary_use_case: true,
+      tvc_relevance: false,
+      sf_account_name: true,
+      sf_opt_out: true,
+      is_customer: true,
+      contact_score: false,
+      contact_priority: true,
+      icp_reason_summary: false,
+      role_fit: false,
+      contact_reason_summary: false,
+      match_method: false,
+      match_confidence: false,
+      customer_match_method: false,
+      customer_match_confidence: false,
+    }));
+  }, [hasScoring]);
+
+  useEffect(() => {
+    if (tableView === 'matching') {
+      setColumnVisibility((prev) => ({
+        ...prev,
+        lead_priority: false,
+        account_status: false,
+        account_priority: false,
+        icp_score: false,
+        icp_confidence: false,
+        primary_use_case: false,
+        tvc_relevance: false,
+        contact_score: false,
+        contact_priority: false,
+        icp_reason_summary: false,
+        role_fit: false,
+        contact_reason_summary: false,
+        match_method: true,
+        match_confidence: true,
+        customer_match_method: true,
+        customer_match_confidence: true,
+      }));
+    } else {
+      setColumnVisibility((prev) => ({
+        ...prev,
+        lead_priority: true,
+        account_status: true,
+        account_priority: true,
+        icp_score: true,
+        primary_use_case: true,
+        contact_priority: true,
+        match_method: false,
+        match_confidence: false,
+        customer_match_method: false,
+        customer_match_confidence: false,
+      }));
+    }
+  }, [tableView]);
 
   // All filtering happens here — outside TanStack entirely so it can't block the render pipeline
   const filteredRows = useMemo(() => {
@@ -584,6 +667,23 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
           onChange={(e) => setFilterInput(e.target.value)}
           className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
         />
+
+        {hasScoring && (
+          <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+            <button
+              onClick={() => setTableView('matching')}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium ${tableView === 'matching' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Matching View
+            </button>
+            <button
+              onClick={() => setTableView('scoring')}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium ${tableView === 'scoring' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Scoring View
+            </button>
+          </div>
+        )}
 
         {/* Match method filter */}
         <div className="flex items-center gap-1.5 text-sm">

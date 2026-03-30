@@ -9,7 +9,7 @@ import { buildSheet15Index, buildOptOutIndex, buildCommittedArrIndex } from '../
 import { parseContactCSV } from '../src/lib/csv.js';
 import { normalizeDomain } from '../src/lib/normalize.js';
 import { extractDomain, matchDomain, getCustomerLookup, findPossibleCustomerMatch } from '../src/lib/matcher.js';
-import { scoreEnrichedRows } from '../src/lib/icpServer.js';
+import { hydrateScoreRows, scoreEnrichedRows } from '../src/lib/icpServer.js';
 import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import { checkRedirects } from '../src/lib/redirect.js';
 import { matchByCompanyName } from '../src/lib/matcher.js';
@@ -308,7 +308,7 @@ app.post('/api/icp-score/stream', async (req, res) => {
   try {
     const scored = await scoreEnrichedRows(
       headers as string[],
-      results as EnrichedRow[],
+      hydrateScoreRows(results as any[]),
       (stage, processed, total) => send({ type: 'progress', stage, processed, total }),
     );
     send({ type: 'complete', results: scored });

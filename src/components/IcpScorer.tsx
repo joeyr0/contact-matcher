@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { EnrichedRow, IcpScoreStreamEvent } from '../lib/types';
+import type { CompactScoreRow, EnrichedRow, IcpScoreStreamEvent } from '../lib/types';
 import { buildScoreableCompanies, classifyAccountRoute } from '../lib/icp';
 
 interface IcpScorerProps {
@@ -37,10 +37,26 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
 
     let response: Response;
     try {
+      const compactResults: CompactScoreRow[] = results.map((row) => ({
+        originalRow: row.originalRow,
+        domain: row.domain,
+        companyName: row.companyName,
+        match: {
+          sfAccountName: row.match.sfAccountName,
+          sfMatchedDomain: row.match.sfMatchedDomain,
+          sfOptOut: row.match.sfOptOut,
+          sfOptOutSpecificContacts: row.match.sfOptOutSpecificContacts,
+          sfOptOutNotes: row.match.sfOptOutNotes,
+          isCustomer: row.match.isCustomer,
+          isCompetitor: row.match.isCompetitor,
+          accountStatus: row.match.accountStatus,
+          icpReasonSummary: row.match.icpReasonSummary,
+        },
+      }));
       response = await fetch('/api/icp-score/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ headers, results }),
+        body: JSON.stringify({ headers, results: compactResults }),
       });
     } catch (error) {
       const message = `Network error: ${String(error)}`;

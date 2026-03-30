@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { scoreEnrichedRows } from '../../src/lib/icpServer.js';
-import type { EnrichedRow } from '../../src/lib/types.js';
+import { hydrateScoreRows, scoreEnrichedRows } from '../../src/lib/icpServer.js';
+import type { CompactScoreRow } from '../../src/lib/types.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -22,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const scored = await scoreEnrichedRows(
       headers as string[],
-      results as EnrichedRow[],
+      hydrateScoreRows(results as CompactScoreRow[]),
       (stage, processed, total) => send({ type: 'progress', stage, processed, total }),
     );
 

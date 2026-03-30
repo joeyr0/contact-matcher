@@ -103,6 +103,26 @@ export interface EnrichedRow {
   match: MatchResult;
 }
 
+export interface CompactScoreRow {
+  originalRow: string[];
+  domain: string;
+  companyName: string;
+  match: Partial<
+    Pick<
+      MatchResult,
+      | 'sfAccountName'
+      | 'sfMatchedDomain'
+      | 'sfOptOut'
+      | 'sfOptOutSpecificContacts'
+      | 'sfOptOutNotes'
+      | 'isCustomer'
+      | 'isCompetitor'
+      | 'accountStatus'
+      | 'icpReasonSummary'
+    >
+  >;
+}
+
 export type MatchStreamEvent =
   | { type: 'progress'; processed: number; total: number }
   | { type: 'complete'; headers: string[]; results: EnrichedRow[]; error?: never }

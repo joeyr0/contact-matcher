@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import type { EnrichedRow, MatchResult } from './types';
+import type { CompactScoreRow, EnrichedRow, MatchResult } from './types';
 import {
   applyDeterministicAccountRoute,
   buildScoreableCompanies,
@@ -218,6 +218,58 @@ function cloneRow(row: EnrichedRow): EnrichedRow {
     originalRow: [...row.originalRow],
     match: { ...row.match },
   };
+}
+
+function emptyMatch(): MatchResult {
+  return {
+    sfAccountName: '',
+    sfAccountId: '',
+    sfAccountOwner: '',
+    stripeCustomerId: '',
+    tkCustomerId: '',
+    sfOptOut: '',
+    sfOptOutSpecificContacts: '',
+    sfOptOutNotes: '',
+    isActiveCustomer: '',
+    customerMatchMethod: '',
+    customerMatchConfidence: '',
+    isCustomer: 'no',
+    possibleCustomer: '',
+    possibleCustomerConfidence: '',
+    possibleCustomerReason: '',
+    customerTier: '',
+    stripeSubscriptionStatus: '',
+    arrCustomerName: '',
+    accountStatus: '',
+    accountPriority: '',
+    icpScore: '',
+    icpConfidence: '',
+    primaryUseCase: '',
+    tvcScore: '',
+    tvcRelevance: '',
+    icpReasonSummary: '',
+    isCompetitor: '',
+    contactScore: '',
+    contactPriority: '',
+    roleFit: '',
+    contactReasonSummary: '',
+    leadPriority: '',
+    matchMethod: 'no_match',
+    matchConfidence: '',
+    sfMatchedDomain: '',
+  };
+}
+
+export function hydrateScoreRows(rows: CompactScoreRow[]): EnrichedRow[] {
+  return rows.map((row) => ({
+    originalRow: Array.isArray(row.originalRow) ? row.originalRow : [],
+    domain: typeof row.domain === 'string' ? row.domain : '',
+    companyName: typeof row.companyName === 'string' ? row.companyName : '',
+    match: {
+      ...emptyMatch(),
+      ...(row.match ?? {}),
+    },
+  }));
 }
 
 function applyCompanyScore(match: MatchResult, score: CompanyScoreResult): MatchResult {
