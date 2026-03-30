@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, startTransition } from 'react';
 import ReferenceDataManager from './components/ReferenceDataManager';
+import PromptManager from './components/PromptManager';
 import ContactUpload from './components/ContactUpload';
 import MatchProgress from './components/MatchProgress';
 import ResultsTable from './components/ResultsTable';
@@ -7,7 +8,7 @@ import FuzzyMatcher from './components/FuzzyMatcher';
 import IcpScorer from './components/IcpScorer';
 import type { EnrichedRow, MatchResult, ReferenceStatus } from './lib/types';
 
-type Tab = 'reference' | 'match';
+type Tab = 'reference' | 'prompts' | 'match';
 type MatchState = 'idle' | 'matching' | 'complete';
 
 export default function App() {
@@ -83,6 +84,7 @@ export default function App() {
               [
                 { id: 'match', label: 'Match' },
                 { id: 'reference', label: 'Salesforce Data' },
+                { id: 'prompts', label: 'Prompts' },
               ] as const
             ).map(({ id, label }) => (
               <button
@@ -103,6 +105,7 @@ export default function App() {
 
       <main className="mx-auto max-w-6xl px-4 py-8">
         {tab === 'reference' && <ReferenceDataManager />}
+        {tab === 'prompts' && <PromptManager />}
 
         {tab === 'match' && (
           <div className="space-y-6">

@@ -11,6 +11,7 @@ import { normalizeDomain } from '../src/lib/normalize.js';
 import { extractDomain, matchDomain, getCustomerLookup, findPossibleCustomerMatch } from '../src/lib/matcher.js';
 import { hydrateScoreRows, scoreEnrichedRows } from '../src/lib/icpServer.js';
 import { generateOutboundDrafts } from '../src/lib/outboundServer.js';
+import { getDefaultPromptConfig, readPromptConfig, resetPromptValue, updatePromptValue } from '../src/lib/promptConfig.js';
 import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import { checkRedirects } from '../src/lib/redirect.js';
 import { matchByCompanyName } from '../src/lib/matcher.js';
@@ -193,6 +194,31 @@ app.get('/api/reference/status', (_req, res) => {
     arr: { loaded: false, rowCount: 0, uniqueCustomers: 0, lastUpdated: null },
   };
   res.json(meta);
+});
+
+app.get('/api/prompts', (_req, res) => {
+  res.json({
+    prompts: readPromptConfig(),
+    defaults: getDefaultPromptConfig(),
+  });
+});
+
+app.put('/api/prompts', (req, res) => {
+  const { key, value } = req.body as { key?: 'icpScoring' | 'outbound'; value?: string };
+  if ((key !== 'icpScoring' && key !== 'outbound') || typeof value !== 'string') {
+    res.status(400).json({ error: 'key and value are required' });
+    return;
+  }
+  res.json({ prompts: updatePromptValue(key, value) });
+});
+
+app.post('/api/prompts', (req, res) => {
+  const { key, action } = req.body as { key?: 'icpScoring' | 'outbound'; action?: string };
+  if ((key !== 'icpScoring' && key !== 'outbound') || action !== 'reset') {
+    res.status(400).json({ error: 'key and action=reset are required' });
+    return;
+  }
+  res.json({ prompts: resetPromptValue(key) });
 });
 
 // ---------------------------------------------------------------------------

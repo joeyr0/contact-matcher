@@ -49,6 +49,16 @@ export interface ReferenceStatus {
   };
 }
 
+export interface PromptEntry {
+  value: string;
+  lastUpdated: string | null;
+}
+
+export interface PromptConfig {
+  icpScoring: PromptEntry;
+  outbound: PromptEntry;
+}
+
 export interface UploadResponse {
   success: boolean;
   rowCount: number;
