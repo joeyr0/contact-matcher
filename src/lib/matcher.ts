@@ -52,6 +52,13 @@ export function matchDomain(
 
   const arrMatch = arrIndex && stripeCustomerId ? arrIndex[stripeCustomerId] : null;
   const hasArr = Boolean(arrIndex);
+  const isActiveCustomer = Boolean(arrMatch?.isActiveCustomer);
+
+  // Treat active/past_due customers as "do not outreach" by default.
+  const effectiveOptOut = Boolean(optOutMatch?.optOut) || isActiveCustomer;
+  const optOutNotesBase = optOutMatch?.notes ?? '';
+  const autoNote = isActiveCustomer ? 'Active customer (Committed ARR)' : '';
+  const combinedNotes = [optOutNotesBase, autoNote].filter(Boolean).join(' · ');
 
   return {
     sfAccountName: accountName,
@@ -59,14 +66,14 @@ export function matchDomain(
     sfAccountOwner: accountOwner,
     stripeCustomerId,
     tkCustomerId,
-    sfOptOut: optOutMatch ? (optOutMatch.optOut ? 'TRUE' : 'FALSE') : '',
+    sfOptOut: hasArr || optOutMatch ? (effectiveOptOut ? 'TRUE' : 'FALSE') : '',
     sfOptOutSpecificContacts: optOutMatch
       ? optOutMatch.optOutSpecificContacts
         ? 'TRUE'
         : 'FALSE'
       : '',
-    sfOptOutNotes: optOutMatch?.notes ?? '',
-    isActiveCustomer: hasArr ? (arrMatch?.isActiveCustomer ? 'TRUE' : 'FALSE') : '',
+    sfOptOutNotes: combinedNotes,
+    isActiveCustomer: hasArr ? (isActiveCustomer ? 'TRUE' : 'FALSE') : '',
     customerTier: arrMatch?.customerTier ?? '',
     stripeSubscriptionStatus: arrMatch?.subscriptionStatus ?? '',
     arrCustomerName: arrMatch?.customerName ?? '',

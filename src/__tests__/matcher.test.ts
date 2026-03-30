@@ -195,5 +195,7 @@ describe('matchDomain — Stripe ID join to Committed ARR', () => {
     expect(result.isActiveCustomer).toBe('TRUE');
     expect(result.customerTier).toBe('Enterprise');
     expect(result.stripeSubscriptionStatus).toBe('active');
+    expect(result.sfOptOut).toBe('TRUE');
+    expect(result.sfOptOutNotes).toContain('Active customer');
   });
 });
