@@ -5,16 +5,16 @@ import path from 'path';
 import formidable from 'formidable';
 import OpenAI from 'openai';
 
-import { buildSheet15Index, buildOptOutIndex } from '../src/lib/indexer.js';
+import { buildSheet15Index, buildOptOutIndex, buildCommittedArrIndex } from '../src/lib/indexer.js';
 import { parseContactCSV } from '../src/lib/csv.js';
 import { normalizeDomain } from '../src/lib/normalize.js';
-import { extractDomain, matchDomain } from '../src/lib/matcher.js';
+import { extractDomain, matchDomain, getCustomerLookup, findPossibleCustomerMatch } from '../src/lib/matcher.js';
 import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import { checkRedirects } from '../src/lib/redirect.js';
 import { matchByCompanyName } from '../src/lib/matcher.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
 import { matchByName, buildAccountNameIndex } from '../src/lib/matcher.js';
-import type { Sheet15Index, OptOutIndex, EnrichedRow, FuzzyBatchResult } from '../src/lib/types.js';
+import type { Sheet15Index, OptOutIndex, CommittedArrIndex, EnrichedRow, FuzzyBatchResult, ReferenceStatus } from '../src/lib/types.js';
 
 const app = express();
 const PORT = 3001;
@@ -48,6 +48,7 @@ function writeJSON(name: string, data: unknown) {
 
 let _sheet15Cache: Sheet15Index | null = null;
 let _optOutCache: OptOutIndex | null = null;
+let _arrCache: CommittedArrIndex | null = null;
 let _domainLookupCache: DomainLookup | null = null;
 let _accountNameIndexCache: Map<string, string> | null = null;
 
@@ -59,6 +60,11 @@ function getSheet15Index(): Sheet15Index | null {
 function getOptOutIndex(): OptOutIndex | null {
   if (!_optOutCache) _optOutCache = readJSON<OptOutIndex>('optout-index.json');
   return _optOutCache;
+}
+
+function getArrIndex(): CommittedArrIndex | null {
+  if (!_arrCache) _arrCache = readJSON<CommittedArrIndex>('committed-arr-index.json');
+  return _arrCache;
 }
 
 function getDomainLookup(): DomainLookup | null {
@@ -80,6 +86,7 @@ function getAccountNameIndex(): Map<string, string> | null {
 function invalidateCache() {
   _sheet15Cache = null;
   _optOutCache = null;
+  _arrCache = null;
   _domainLookupCache = null;
   _accountNameIndexCache = null;
 }
@@ -87,17 +94,18 @@ function invalidateCache() {
 // Pre-warm cache at startup so first request is fast
 getSheet15Index();
 getOptOutIndex();
+getArrIndex();
 getDomainLookup();
 getAccountNameIndex();
 
 // ---------------------------------------------------------------------------
-// POST /api/reference/upload?type=sheet15|optout
+// POST /api/reference/upload?type=sheet15|optout|arr
 // ---------------------------------------------------------------------------
 
 app.post('/api/reference/upload', (req, res) => {
   const type = req.query['type'];
-  if (type !== 'sheet15' && type !== 'optout') {
-    res.status(400).json({ error: 'Invalid type. Must be sheet15 or optout.' });
+  if (type !== 'sheet15' && type !== 'optout' && type !== 'arr') {
+    res.status(400).json({ error: 'Invalid type. Must be sheet15, optout, or arr.' });
     return;
   }
 
@@ -123,30 +131,49 @@ app.post('/api/reference/upload', (req, res) => {
       return;
     }
 
-    const parseResult = type === 'sheet15' ? buildSheet15Index(csvText) : buildOptOutIndex(csvText);
+    const parseResult =
+      type === 'sheet15'
+        ? buildSheet15Index(csvText)
+        : type === 'optout'
+          ? buildOptOutIndex(csvText)
+          : buildCommittedArrIndex(csvText);
 
     if (parseResult.error) {
       res.status(400).json({ error: parseResult.error });
       return;
     }
 
-    const blobKey = type === 'sheet15' ? 'sheet15-index.json' : 'optout-index.json';
+    const blobKey = type === 'sheet15' ? 'sheet15-index.json' : type === 'optout' ? 'optout-index.json' : 'committed-arr-index.json';
     writeJSON(blobKey, parseResult.index);
     invalidateCache();
 
-    const existing = readJSON<Record<string, unknown>>('metadata.json') ?? {};
-    (existing as Record<string, unknown>)[type] = {
-      loaded: true,
-      rowCount: parseResult.rowCount,
-      uniqueDomains: parseResult.uniqueDomains,
-      lastUpdated: new Date().toISOString(),
+    const existing = readJSON<ReferenceStatus>('metadata.json') ?? {
+      sheet15: { loaded: false, rowCount: 0, uniqueDomains: 0, lastUpdated: null },
+      optout: { loaded: false, rowCount: 0, uniqueDomains: 0, lastUpdated: null },
+      arr: { loaded: false, rowCount: 0, uniqueCustomers: 0, lastUpdated: null },
     };
+    if (type === 'arr') {
+      existing.arr = {
+        loaded: true,
+        rowCount: parseResult.rowCount,
+        uniqueCustomers: parseResult.uniqueCount,
+        lastUpdated: new Date().toISOString(),
+      };
+    } else {
+      existing[type] = {
+        loaded: true,
+        rowCount: parseResult.rowCount,
+        uniqueDomains: parseResult.uniqueCount,
+        lastUpdated: new Date().toISOString(),
+      };
+    }
     writeJSON('metadata.json', existing);
 
     res.json({
       success: true,
       rowCount: parseResult.rowCount,
-      uniqueDomains: parseResult.uniqueDomains,
+      uniqueCount: parseResult.uniqueCount,
+      uniqueLabel: type === 'arr' ? 'customers' : 'domains',
       skippedRows: parseResult.skippedRows,
     });
   });
@@ -157,9 +184,10 @@ app.post('/api/reference/upload', (req, res) => {
 // ---------------------------------------------------------------------------
 
 app.get('/api/reference/status', (_req, res) => {
-  const meta = readJSON('metadata.json') ?? {
+  const meta = readJSON<ReferenceStatus>('metadata.json') ?? {
     sheet15: { loaded: false, rowCount: 0, uniqueDomains: 0, lastUpdated: null },
     optout: { loaded: false, rowCount: 0, uniqueDomains: 0, lastUpdated: null },
+    arr: { loaded: false, rowCount: 0, uniqueCustomers: 0, lastUpdated: null },
   };
   res.json(meta);
 });
@@ -205,6 +233,7 @@ app.post('/api/match/stream', (req, res) => {
 
     const sheet15Index = getSheet15Index();
     const optOutIndex = getOptOutIndex();
+    const arrIndex = getArrIndex();
     if (!sheet15Index || !optOutIndex) {
       res.status(503).json({ error: 'Reference data not loaded. Upload both CSVs first.' });
       return;
@@ -219,12 +248,29 @@ app.post('/api/match/stream', (req, res) => {
 
     const { headers, rows, emailColIdx, isDomainColumn, companyColIdx } = parsed;
     const results: EnrichedRow[] = [];
+    const customerLookup = arrIndex ? getCustomerLookup(arrIndex) : null;
 
     for (let i = 0; i < rows.length; i++) {
       const rawValue = (rows[i]?.[emailColIdx] ?? '').trim();
       const domain = isDomainColumn ? normalizeDomain(rawValue) : extractDomain(rawValue);
       const companyName = companyColIdx >= 0 ? (rows[i]?.[companyColIdx] ?? '').trim() : '';
-      const match = matchDomain(domain, sheet15Index, optOutIndex);
+      const match = matchDomain(domain, sheet15Index, optOutIndex, arrIndex);
+
+      if (
+        customerLookup &&
+        match.matchMethod === 'no_match' &&
+        match.isActiveCustomer !== 'TRUE'
+      ) {
+        const possibleCustomer = findPossibleCustomerMatch(customerLookup, companyName, domain);
+        if (possibleCustomer) {
+          match.possibleCustomer = 'TRUE';
+          match.possibleCustomerConfidence = possibleCustomer.confidence;
+          match.possibleCustomerReason = `${possibleCustomer.reason}: ${possibleCustomer.record.customerName}`;
+          match.arrCustomerName = possibleCustomer.record.customerName;
+          match.customerTier = possibleCustomer.record.customerTier;
+          match.stripeSubscriptionStatus = possibleCustomer.record.subscriptionStatus;
+        }
+      }
       results.push({ originalRow: rows[i] ?? [], domain, companyName, match });
 
       if ((i + 1) % 50 === 0 || i === rows.length - 1) {
@@ -255,6 +301,7 @@ app.post('/api/fuzzy-match', async (req, res) => {
 
   const sheet15Index = getSheet15Index();
   const optOutIndex = getOptOutIndex();
+  const arrIndex = getArrIndex();
   if (!sheet15Index || !optOutIndex) {
     res.status(503).json({ error: 'Reference data not loaded' });
     return;
@@ -270,7 +317,7 @@ app.post('/api/fuzzy-match', async (req, res) => {
 
   if (nameIndex) {
     for (const domain of validDomains) {
-      const nameMatch = matchByName(domain, nameIndex, sheet15Index, optOutIndex);
+      const nameMatch = matchByName(domain, nameIndex, sheet15Index, optOutIndex, arrIndex);
       if (nameMatch) {
         validatedMatches[domain] = nameMatch;
         matched.add(domain);
@@ -297,7 +344,7 @@ app.post('/api/fuzzy-match', async (req, res) => {
   for (const domain of needsLLM) {
     const redirectedDomain = redirectMap.get(domain);
     if (redirectedDomain) {
-      const base = matchDomain(redirectedDomain, sheet15Index, optOutIndex);
+      const base = matchDomain(redirectedDomain, sheet15Index, optOutIndex, arrIndex);
       if (base.matchMethod !== 'no_match') {
         validatedMatches[domain] = { ...base, matchMethod: 'redirect', matchConfidence: 'high' };
         matched.add(domain);
@@ -319,7 +366,7 @@ app.post('/api/fuzzy-match', async (req, res) => {
   for (const domain of needsLLMAfterRedirect) {
     const companyName = companyNames[domain] ?? '';
     if (companyName && nameIndex) {
-      const companyMatch = matchByCompanyName(companyName, nameIndex, sheet15Index, optOutIndex);
+      const companyMatch = matchByCompanyName(companyName, nameIndex, sheet15Index, optOutIndex, arrIndex);
       if (companyMatch) {
         validatedMatches[domain] = companyMatch;
         matched.add(domain);
@@ -389,7 +436,7 @@ app.post('/api/fuzzy-match', async (req, res) => {
       console.warn(`[fuzzy] Hallucination: ${unmatchedDomain} → ${matchedDomain} (not in index)`);
       continue;
     }
-    const base = matchDomain(matchedDomain, sheet15Index, optOutIndex);
+    const base = matchDomain(matchedDomain, sheet15Index, optOutIndex, arrIndex);
     validatedMatches[unmatchedDomain] = { ...base, matchMethod: 'fuzzy', matchConfidence: confidence };
     matched.add(unmatchedDomain);
   }
