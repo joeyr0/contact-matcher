@@ -11,6 +11,7 @@ import {
   getPreferredCompanyName,
   isLowPriorityCommercialRole,
   isObviousContactExclude,
+  isSeniorRelevantTitle,
   mapAccountPriority,
   mapContactPriority,
   mapTvcRelevance,
@@ -125,6 +126,7 @@ For each contact, score the person's role fit for outbound:
 IMPORTANT RULES
 - CTO, CEO, founder, VP/Head of Engineering, Head of Crypto, Head of Digital Assets often score 4-5.
 - Senior engineering, product, platform, payments, treasury, infrastructure leaders often score 3-4.
+- Senior security, cyber, risk, fraud, trust, compliance, and operations leaders at relevant accounts should usually score at least 4, not 3.
 - Marketing, general BD, general ops, finance, legal usually score 1-2 unless title strongly indicates crypto ownership.
 - HR, recruiting, PR, office admin, interns, students should score 1.
 - Keep roleFit short, for example: decision_maker, engineering_leader, crypto_owner, product_influence, low_relevance, excluded_role.
@@ -399,6 +401,14 @@ export async function scoreEnrichedRows(
       return;
     }
 
+    if (isSeniorRelevantTitle(contact.title)) {
+      row.match.contactScore = 4;
+      row.match.contactPriority = 'medium';
+      row.match.roleFit = 'senior_relevant_function';
+      row.match.contactReasonSummary = 'Senior leader in a relevant function for crypto or wallet initiatives.';
+      return;
+    }
+
     if (!contact.title) return;
 
     contactInputs.push({
@@ -426,6 +436,15 @@ export async function scoreEnrichedRows(
       row.match.contactPriority = mapContactPriority(score.contactScore);
       row.match.roleFit = score.roleFit;
       row.match.contactReasonSummary = score.reasonSummary;
+
+      const contact = extractContactFields(headers, row.originalRow);
+      if (isSeniorRelevantTitle(contact.title) && row.match.contactPriority === 'low') {
+        row.match.contactScore = 4;
+        row.match.contactPriority = 'medium';
+        row.match.roleFit = row.match.roleFit || 'senior_relevant_function';
+        row.match.contactReasonSummary =
+          row.match.contactReasonSummary || 'Senior leader in a relevant function for crypto or wallet initiatives.';
+      }
     }
   } else {
     onProgress?.('contacts', 0, 0);

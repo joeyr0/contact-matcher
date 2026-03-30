@@ -3,6 +3,7 @@ import {
   classifyAccountRoute,
   computeLeadPriority,
   isLowPriorityCommercialRole,
+  isSeniorRelevantTitle,
   isKnownCompetitor,
   mapAccountPriority,
   mapContactPriority,
@@ -111,6 +112,14 @@ describe('priority mapping', () => {
     expect(isLowPriorityCommercialRole('BD')).toBe(true);
     expect(isLowPriorityCommercialRole('Biz Ops')).toBe(true);
     expect(isLowPriorityCommercialRole('VP Engineering')).toBe(false);
+  });
+
+  it('treats senior relevant functional titles as medium floor candidates', () => {
+    expect(isSeniorRelevantTitle('VP of Cyber')).toBe(true);
+    expect(isSeniorRelevantTitle('Head of Security Engineering')).toBe(true);
+    expect(isSeniorRelevantTitle('Director, Digital Assets Risk')).toBe(true);
+    expect(isSeniorRelevantTitle('VP Partnerships')).toBe(false);
+    expect(isSeniorRelevantTitle('Marketing Analyst')).toBe(false);
   });
 });
 

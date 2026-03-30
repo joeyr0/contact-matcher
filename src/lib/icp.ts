@@ -134,6 +134,40 @@ const LOW_PRIORITY_TITLE_PATTERNS = [
   /\bsales\b/i,
 ];
 
+const SENIOR_TITLE_PATTERNS = [
+  /\bvp\b/i,
+  /\bvice president\b/i,
+  /\bhead\b/i,
+  /\bdirector\b/i,
+  /\bciso\b/i,
+  /\bcio\b/i,
+  /\bcto\b/i,
+  /\bchief\b/i,
+];
+
+const RELEVANT_FUNCTION_TITLE_PATTERNS = [
+  /\bcyber\b/i,
+  /\bsecurity\b/i,
+  /\binfosec\b/i,
+  /\bplatform\b/i,
+  /\binfra(structure)?\b/i,
+  /\bengineering\b/i,
+  /\bproduct\b/i,
+  /\bpayments?\b/i,
+  /\btreasury\b/i,
+  /\bcrypto\b/i,
+  /\bdigital assets?\b/i,
+  /\bblockchain\b/i,
+  /\bwallets?\b/i,
+  /\bauth(entication)?\b/i,
+  /\brisk\b/i,
+  /\bfraud\b/i,
+  /\btrust\b/i,
+  /\bcompliance\b/i,
+  /\bsettlement\b/i,
+  /\boperations?\b/i,
+];
+
 export interface AccountRoute {
   status: AccountStatus;
   isCompetitor: boolean;
@@ -299,6 +333,13 @@ export function isObviousContactExclude(title: string): boolean {
 export function isLowPriorityCommercialRole(title: string): boolean {
   if (!title) return false;
   return LOW_PRIORITY_TITLE_PATTERNS.some((pattern) => pattern.test(title));
+}
+
+export function isSeniorRelevantTitle(title: string): boolean {
+  if (!title) return false;
+  const hasSeniority = SENIOR_TITLE_PATTERNS.some((pattern) => pattern.test(title));
+  if (!hasSeniority) return false;
+  return RELEVANT_FUNCTION_TITLE_PATTERNS.some((pattern) => pattern.test(title));
 }
 
 export function computeLeadPriority(match: MatchResult): LeadPriority {
