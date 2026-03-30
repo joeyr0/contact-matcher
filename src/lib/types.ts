@@ -68,7 +68,9 @@ export interface MatchResult {
   sfOptOutSpecificContacts: string; // 'TRUE' | 'FALSE' | ''
   sfOptOutNotes: string;
   isActiveCustomer: string; // 'TRUE' | 'FALSE' | ''
-  customerMatchMethod: '' | 'stripe_id' | 'account_name' | 'domain_root';
+  customerMatchMethod: '' | 'stripe_id' | 'account_name' | 'domain_root' | 'name_similarity';
+  customerMatchConfidence: '' | 'high' | 'medium' | 'low';
+  isCustomer: 'yes' | 'maybe' | 'no';
   possibleCustomer: string; // 'TRUE' | 'FALSE' | ''
   possibleCustomerConfidence: '' | 'medium' | 'low';
   possibleCustomerReason: string;

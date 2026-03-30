@@ -19,6 +19,8 @@ const NO_MATCH: MatchResult = {
   sfOptOutNotes: '',
   isActiveCustomer: '',
   customerMatchMethod: '',
+  customerMatchConfidence: '',
+  isCustomer: 'no',
   possibleCustomer: '',
   possibleCustomerConfidence: '',
   possibleCustomerReason: '',
@@ -259,7 +261,7 @@ export function matchDomain(
       : null;
 
   const arrMatch = directArrMatch?.isActiveCustomer ? directArrMatch : inferredByName ?? inferredByDomain ?? directArrMatch ?? null;
-  const customerMatchMethod: MatchResult['customerMatchMethod'] =
+  const hardCustomerMatchMethod: MatchResult['customerMatchMethod'] =
     directArrMatch?.isActiveCustomer
       ? 'stripe_id'
       : inferredByName
@@ -272,19 +274,26 @@ export function matchDomain(
     hasArr && !isActiveCustomer && customerLookup
       ? findPossibleCustomerMatch(customerLookup, accountName, domain)
       : null;
+  const customerMatchMethod: MatchResult['customerMatchMethod'] =
+    hardCustomerMatchMethod || (possibleCustomerMatch ? 'name_similarity' : '');
+  const customerMatchConfidence: MatchResult['customerMatchConfidence'] =
+    hardCustomerMatchMethod ? 'high' : possibleCustomerMatch?.confidence ?? '';
 
-  // Treat active/past_due customers as "do not outreach" by default.
-  const effectiveOptOut = Boolean(optOutMatch?.optOut) || isActiveCustomer;
+  // Only Enterprise active customers are auto-opted-out from outreach.
+  const autoOptOutEnterprise = isActiveCustomer && arrMatch?.customerTier === 'Enterprise';
+  const effectiveOptOut = Boolean(optOutMatch?.optOut) || autoOptOutEnterprise;
   const optOutNotesBase = optOutMatch?.notes ?? '';
   const autoNote =
-    customerMatchMethod === 'stripe_id'
-      ? 'Active customer (Committed ARR via Stripe ID)'
-      : customerMatchMethod === 'account_name'
-        ? 'Active customer (Committed ARR via account name)'
-        : customerMatchMethod === 'domain_root'
-          ? 'Active customer (Committed ARR via domain root)'
+    autoOptOutEnterprise && hardCustomerMatchMethod === 'stripe_id'
+      ? 'Enterprise customer (Committed ARR via Stripe ID)'
+      : autoOptOutEnterprise && hardCustomerMatchMethod === 'account_name'
+        ? 'Enterprise customer (Committed ARR via account name)'
+        : autoOptOutEnterprise && hardCustomerMatchMethod === 'domain_root'
+          ? 'Enterprise customer (Committed ARR via domain root)'
           : '';
   const combinedNotes = [optOutNotesBase, autoNote].filter(Boolean).join(' · ');
+  const isCustomer: MatchResult['isCustomer'] =
+    isActiveCustomer ? 'yes' : possibleCustomerMatch ? 'maybe' : 'no';
 
   return {
     sfAccountName: accountName,
@@ -301,6 +310,8 @@ export function matchDomain(
     sfOptOutNotes: combinedNotes,
     isActiveCustomer: hasArr ? (isActiveCustomer ? 'TRUE' : 'FALSE') : '',
     customerMatchMethod,
+    customerMatchConfidence,
+    isCustomer,
     possibleCustomer: hasArr ? (possibleCustomerMatch ? 'TRUE' : 'FALSE') : '',
     possibleCustomerConfidence: possibleCustomerMatch?.confidence ?? '',
     possibleCustomerReason: possibleCustomerMatch

@@ -29,10 +29,9 @@ const ENRICHED_HEADERS = [
   'sf_opt_out',
   'sf_opt_out_specific_contacts',
   'sf_opt_out_notes',
-  'is_active_customer',
+  'is_customer',
+  'customer_match_confidence',
   'customer_match_method',
-  'possible_customer',
-  'possible_customer_confidence',
   'possible_customer_reason',
   'customer_tier',
   'stripe_subscription_status',
@@ -75,10 +74,9 @@ function toFlatRows(headers: string[], results: EnrichedRow[]): FlatRow[] {
     row['sf_opt_out'] = match.sfOptOut;
     row['sf_opt_out_specific_contacts'] = match.sfOptOutSpecificContacts;
     row['sf_opt_out_notes'] = match.sfOptOutNotes;
-    row['is_active_customer'] = match.isActiveCustomer;
+    row['is_customer'] = match.isCustomer;
+    row['customer_match_confidence'] = match.customerMatchConfidence || match.possibleCustomerConfidence;
     row['customer_match_method'] = match.customerMatchMethod;
-    row['possible_customer'] = match.possibleCustomer;
-    row['possible_customer_confidence'] = match.possibleCustomerConfidence;
     row['possible_customer_reason'] = match.possibleCustomerReason;
     row['customer_tier'] = match.customerTier;
     row['stripe_subscription_status'] = match.stripeSubscriptionStatus;
@@ -129,14 +127,12 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
   }, [filterInput]);
   const [methodFilter, setMethodFilter] = useState<MatchMethodFilter[]>([]);
   const [optOutFilter, setOptOutFilter] = useState<'all' | 'opted_out' | 'specific_only'>('all');
-  const [customerFilter, setCustomerFilter] = useState<'prospects' | 'review' | 'customers' | 'all'>('prospects');
+  const [customerFilter, setCustomerFilter] = useState<'all' | 'customers' | 'review' | 'prospects'>('all');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     sf_account_id: false,
     tk_customer_id: false,
     sf_opt_out_specific_contacts: false,
     sf_opt_out_notes: false,
-    customer_match_method: false,
-    possible_customer_confidence: false,
     possible_customer_reason: false,
     stripe_subscription_status: false,
     arr_customer_name: false,
@@ -156,11 +152,11 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
       rows = rows.filter((r) => r['sf_opt_out_specific_contacts'] === 'TRUE');
 
     if (customerFilter === 'prospects')
-      rows = rows.filter((r) => r['is_active_customer'] !== 'TRUE' && r['possible_customer'] !== 'TRUE');
+      rows = rows.filter((r) => r['is_customer'] === 'no');
     else if (customerFilter === 'review')
-      rows = rows.filter((r) => r['is_active_customer'] !== 'TRUE' && r['possible_customer'] === 'TRUE');
+      rows = rows.filter((r) => r['is_customer'] === 'maybe');
     else if (customerFilter === 'customers')
-      rows = rows.filter((r) => r['is_active_customer'] === 'TRUE');
+      rows = rows.filter((r) => r['is_customer'] === 'yes');
 
     if (methodFilter.length > 0)
       rows = rows.filter((r) => methodFilter.includes(r['match_method'] as MatchMethodFilter));
@@ -271,48 +267,38 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
         accessorFn: (row) => row['sf_opt_out_notes'] ?? '',
       },
       {
-        id: 'is_active_customer',
-        header: 'is_active_customer',
-        accessorFn: (row) => row['is_active_customer'] ?? '',
+        id: 'is_customer',
+        header: 'is_customer',
+        accessorFn: (row) => row['is_customer'] ?? '',
         cell: (info) => {
           const v = info.getValue<string>();
-          if (v === 'TRUE') {
+          if (v === 'yes') {
             return (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                Active customer
+                Yes
               </span>
             );
           }
-          if (v === 'FALSE') return <span className="text-xs text-gray-400">FALSE</span>;
+          if (v === 'maybe') {
+            return (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                Maybe
+              </span>
+            );
+          }
+          if (v === 'no') return <span className="text-xs text-gray-400">No</span>;
           return null;
         },
+      },
+      {
+        id: 'customer_match_confidence',
+        header: 'customer_match_confidence',
+        accessorFn: (row) => row['customer_match_confidence'] ?? '',
       },
       {
         id: 'customer_match_method',
         header: 'customer_match_method',
         accessorFn: (row) => row['customer_match_method'] ?? '',
-      },
-      {
-        id: 'possible_customer',
-        header: 'possible_customer',
-        accessorFn: (row) => row['possible_customer'] ?? '',
-        cell: (info) => {
-          const v = info.getValue<string>();
-          if (v === 'TRUE') {
-            return (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                Review customer
-              </span>
-            );
-          }
-          if (v === 'FALSE') return <span className="text-xs text-gray-400">FALSE</span>;
-          return null;
-        },
-      },
-      {
-        id: 'possible_customer_confidence',
-        header: 'possible_customer_confidence',
-        accessorFn: (row) => row['possible_customer_confidence'] ?? '',
       },
       {
         id: 'possible_customer_reason',
@@ -325,8 +311,8 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
         accessorFn: (row) => row['customer_tier'] ?? '',
         cell: (info) => {
           const v = info.getValue<string>();
-          const isActive = info.row.original['is_active_customer'] === 'TRUE';
-          if (!isActive) return null;
+          const isCustomer = info.row.original['is_customer'] !== 'no';
+          if (!isCustomer) return null;
           if (v === 'Enterprise') {
             return (
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">
@@ -411,10 +397,10 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     specificOnly: flatRows.filter(
       (r) => r['sf_opt_out_specific_contacts'] === 'TRUE' && r['sf_opt_out'] !== 'TRUE',
     ).length,
-    activeCustomers: flatRows.filter((r) => r['is_active_customer'] === 'TRUE').length,
-    possibleCustomers: flatRows.filter((r) => r['possible_customer'] === 'TRUE' && r['is_active_customer'] !== 'TRUE').length,
-    enterpriseCustomers: flatRows.filter((r) => r['is_active_customer'] === 'TRUE' && r['customer_tier'] === 'Enterprise').length,
-    proCustomers: flatRows.filter((r) => r['is_active_customer'] === 'TRUE' && r['customer_tier'] === 'Pro').length,
+    customersYes: flatRows.filter((r) => r['is_customer'] === 'yes').length,
+    customersMaybe: flatRows.filter((r) => r['is_customer'] === 'maybe').length,
+    enterpriseCustomers: flatRows.filter((r) => r['is_customer'] !== 'no' && r['customer_tier'] === 'Enterprise').length,
+    proCustomers: flatRows.filter((r) => r['is_customer'] !== 'no' && r['customer_tier'] === 'Pro').length,
   }), [flatRows]);
 
   // Virtualization
@@ -447,12 +433,12 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     startTransition(() => {
       setMethodFilter([]);
       setOptOutFilter('all');
-      setCustomerFilter('prospects');
+      setCustomerFilter('all');
       setGlobalFilter('');
     });
   };
 
-  const hasFilters = methodFilter.length > 0 || optOutFilter !== 'all' || customerFilter !== 'prospects' || filterInput !== '';
+  const hasFilters = methodFilter.length > 0 || optOutFilter !== 'all' || customerFilter !== 'all' || filterInput !== '';
 
   return (
     <div className="space-y-3">
@@ -505,10 +491,10 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
             onChange={(e) => startTransition(() => setCustomerFilter(e.target.value as typeof customerFilter))}
             className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none"
           >
-            <option value="prospects">Prospects only</option>
-            <option value="review">Possible customers</option>
-            <option value="customers">Active customers</option>
             <option value="all">All</option>
+            <option value="customers">Customers</option>
+            <option value="review">Maybe customers</option>
+            <option value="prospects">Prospects only</option>
           </select>
         </div>
 
@@ -590,14 +576,14 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
             contacts
           </span>
         )}
-        {stats.activeCustomers > 0 && (
+        {stats.customersYes > 0 && (
           <span className="text-slate-700">
-            <span className="font-semibold">{stats.activeCustomers.toLocaleString()}</span> active customers
+            <span className="font-semibold">{stats.customersYes.toLocaleString()}</span> customers
           </span>
         )}
-        {stats.possibleCustomers > 0 && (
+        {stats.customersMaybe > 0 && (
           <span className="text-amber-700">
-            <span className="font-semibold">{stats.possibleCustomers.toLocaleString()}</span> possible customers
+            <span className="font-semibold">{stats.customersMaybe.toLocaleString()}</span> maybe customers
           </span>
         )}
         {stats.enterpriseCustomers > 0 && (
@@ -692,17 +678,18 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
               const isSpecificOnly =
                 row.original['sf_opt_out_specific_contacts'] === 'TRUE' &&
                 row.original['sf_opt_out'] !== 'TRUE';
-              const isPossibleCustomer =
-                row.original['possible_customer'] === 'TRUE' &&
-                row.original['is_active_customer'] !== 'TRUE';
+              const isCustomerMaybe = row.original['is_customer'] === 'maybe';
+              const isCustomerYes = row.original['is_customer'] === 'yes' && row.original['sf_opt_out'] !== 'TRUE';
               return (
                 <tr
                   key={row.id}
                   className={
                     isOptedOut
                       ? 'bg-red-50 hover:bg-red-100'
-                      : isPossibleCustomer
+                      : isCustomerMaybe
                         ? 'bg-amber-50 hover:bg-amber-100'
+                      : isCustomerYes
+                        ? 'bg-slate-50 hover:bg-slate-100'
                       : isSpecificOnly
                         ? 'bg-amber-50 hover:bg-amber-100'
                         : 'hover:bg-gray-50'
@@ -735,16 +722,21 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
       </div>
 
       {/* Specific contacts opt-out legend */}
-      {(stats.optedOut > 0 || stats.specificOnly > 0 || stats.possibleCustomers > 0) && (
+      {(stats.optedOut > 0 || stats.specificOnly > 0 || stats.customersMaybe > 0 || stats.customersYes > 0) && (
         <div className="flex gap-4 text-xs text-gray-500">
           {stats.optedOut > 0 && (
             <span className="flex items-center gap-1">
               <span className="inline-block h-3 w-3 rounded-sm bg-red-100" /> Full opt-out
             </span>
           )}
-          {stats.possibleCustomers > 0 && (
+          {stats.customersYes > 0 && (
             <span className="flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded-sm bg-amber-100" /> Possible customer
+              <span className="inline-block h-3 w-3 rounded-sm bg-slate-100" /> Customer
+            </span>
+          )}
+          {stats.customersMaybe > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-3 w-3 rounded-sm bg-amber-100" /> Maybe customer
               review
             </span>
           )}

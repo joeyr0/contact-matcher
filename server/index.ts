@@ -263,7 +263,10 @@ app.post('/api/match/stream', (req, res) => {
       ) {
         const possibleCustomer = findPossibleCustomerMatch(customerLookup, companyName, domain);
         if (possibleCustomer) {
+          match.isCustomer = 'maybe';
           match.possibleCustomer = 'TRUE';
+          match.customerMatchMethod = 'name_similarity';
+          match.customerMatchConfidence = possibleCustomer.confidence;
           match.possibleCustomerConfidence = possibleCustomer.confidence;
           match.possibleCustomerReason = `${possibleCustomer.reason}: ${possibleCustomer.record.customerName}`;
           match.arrCustomerName = possibleCustomer.record.customerName;

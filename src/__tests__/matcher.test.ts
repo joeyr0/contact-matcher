@@ -192,11 +192,43 @@ describe('matchDomain — Stripe ID join to Committed ARR', () => {
 
     const result = matchDomain('example.com', sheet15WithStripe, optOut, arr);
     expect(result.stripeCustomerId).toBe('cus_123');
+    expect(result.isCustomer).toBe('yes');
     expect(result.isActiveCustomer).toBe('TRUE');
+    expect(result.customerMatchConfidence).toBe('high');
     expect(result.customerTier).toBe('Enterprise');
     expect(result.stripeSubscriptionStatus).toBe('active');
     expect(result.sfOptOut).toBe('TRUE');
-    expect(result.sfOptOutNotes).toContain('Active customer');
+    expect(result.sfOptOutNotes).toContain('Enterprise customer');
+  });
+});
+
+describe('matchDomain — Pro customers are not auto-opted-out', () => {
+  it('marks a Pro customer as yes without forcing sf_opt_out', () => {
+    const sheet15WithStripe: Sheet15Index = {
+      'proco.com': {
+        accountId: 'ACC998',
+        accountName: 'Pro Co',
+        accountOwner: 'Owner',
+        stripeCustomerId: 'cus_pro',
+      },
+    };
+
+    const arr: CommittedArrIndex = {
+      'cus_pro': {
+        customerId: 'cus_pro',
+        customerName: 'Pro Co',
+        accountOwner: 'Owner',
+        subscriptionStatus: 'active',
+        isActiveCustomer: true,
+        customerTier: 'Pro',
+      },
+    };
+
+    const result = matchDomain('proco.com', sheet15WithStripe, optOut, arr);
+    expect(result.isCustomer).toBe('yes');
+    expect(result.isActiveCustomer).toBe('TRUE');
+    expect(result.customerTier).toBe('Pro');
+    expect(result.sfOptOut).toBe('FALSE');
   });
 });
 
@@ -231,8 +263,10 @@ describe('matchDomain — active customer fallback by canonical account name', (
     };
 
     const result = matchDomain('infinex.xyz', sheet15WithStripe, optOut, arr);
+    expect(result.isCustomer).toBe('yes');
     expect(result.isActiveCustomer).toBe('TRUE');
     expect(result.customerMatchMethod).toBe('account_name');
+    expect(result.customerMatchConfidence).toBe('high');
     expect(result.customerTier).toBe('Enterprise');
     expect(result.arrCustomerName).toBe('Infinex (Prod)');
     expect(result.sfOptOut).toBe('TRUE');
@@ -262,6 +296,7 @@ describe('matchDomain — active customer fallback by domain root', () => {
     };
 
     const result = matchDomain('infinex.xyz', sheet15WithStripe, optOut, arr);
+    expect(result.isCustomer).toBe('yes');
     expect(result.isActiveCustomer).toBe('TRUE');
     expect(result.customerMatchMethod).toBe('domain_root');
     expect(result.arrCustomerName).toBe('Infinex (Prod)');
@@ -292,8 +327,10 @@ describe('matchDomain — possible customer review quarantine', () => {
     };
 
     const result = matchDomain('native.xyz', sheet15WithStripe, optOut, arr);
+    expect(result.isCustomer).toBe('maybe');
     expect(result.isActiveCustomer).toBe('FALSE');
     expect(result.possibleCustomer).toBe('TRUE');
+    expect(result.customerMatchConfidence).toBe('low');
     expect(result.possibleCustomerConfidence).toBe('low');
     expect(result.possibleCustomerReason).toContain('Native Markets Inc');
     expect(result.sfOptOut).toBe('FALSE');
