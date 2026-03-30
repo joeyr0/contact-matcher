@@ -12,7 +12,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'PUT') {
     const { key, value } = req.body as { key?: keyof PromptConfig; value?: string };
-    if ((key !== 'icpScoring' && key !== 'outbound') || typeof value !== 'string') {
+    if ((key !== 'icpScoring' && key !== 'contactScoring' && key !== 'outbound') || typeof value !== 'string') {
       return res.status(400).json({ error: 'key and value are required' });
     }
     return res.status(200).json({ prompts: updatePromptValue(key, value) });
@@ -20,7 +20,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'POST') {
     const { key, action } = req.body as { key?: keyof PromptConfig; action?: string };
-    if ((key !== 'icpScoring' && key !== 'outbound') || action !== 'reset') {
+    if ((key !== 'icpScoring' && key !== 'contactScoring' && key !== 'outbound') || action !== 'reset') {
       return res.status(400).json({ error: 'key and action=reset are required' });
     }
     return res.status(200).json({ prompts: resetPromptValue(key) });

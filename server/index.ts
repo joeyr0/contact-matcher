@@ -204,8 +204,8 @@ app.get('/api/prompts', (_req, res) => {
 });
 
 app.put('/api/prompts', (req, res) => {
-  const { key, value } = req.body as { key?: 'icpScoring' | 'outbound'; value?: string };
-  if ((key !== 'icpScoring' && key !== 'outbound') || typeof value !== 'string') {
+  const { key, value } = req.body as { key?: 'icpScoring' | 'contactScoring' | 'outbound'; value?: string };
+  if ((key !== 'icpScoring' && key !== 'contactScoring' && key !== 'outbound') || typeof value !== 'string') {
     res.status(400).json({ error: 'key and value are required' });
     return;
   }
@@ -213,8 +213,8 @@ app.put('/api/prompts', (req, res) => {
 });
 
 app.post('/api/prompts', (req, res) => {
-  const { key, action } = req.body as { key?: 'icpScoring' | 'outbound'; action?: string };
-  if ((key !== 'icpScoring' && key !== 'outbound') || action !== 'reset') {
+  const { key, action } = req.body as { key?: 'icpScoring' | 'contactScoring' | 'outbound'; action?: string };
+  if ((key !== 'icpScoring' && key !== 'contactScoring' && key !== 'outbound') || action !== 'reset') {
     res.status(400).json({ error: 'key and action=reset are required' });
     return;
   }

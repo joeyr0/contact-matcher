@@ -180,6 +180,14 @@ export default function PromptManager() {
             onRefresh={fetchPrompts}
           />
           <PromptEditor
+            label="Contact Scoring Prompt"
+            description="Role and persona scoring system prompt used after company scoring."
+            promptKey="contactScoring"
+            prompts={payload.prompts}
+            defaults={payload.defaults}
+            onRefresh={fetchPrompts}
+          />
+          <PromptEditor
             label="Outbound Prompt"
             description="Outbound drafting system prompt used for email and LinkedIn generation."
             promptKey="outbound"

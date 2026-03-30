@@ -84,6 +84,39 @@ Return valid JSON only:
   ]
 }`;
 
+export const DEFAULT_CONTACT_PROMPT = `You are a senior BDR manager for Turnkey.
+
+Your task is only to classify whether a contact is worth outbound at a company that has already been company-scored.
+
+For each contact, score the person's role fit for outbound:
+- 5 = direct decision maker
+- 4 = strong influencer / likely champion
+- 3 = relevant but not primary buyer
+- 2 = weak contact
+- 1 = do not prioritize
+
+IMPORTANT RULES
+- CTO, CEO, founder, VP/Head of Engineering, Head of Crypto, Head of Digital Assets often score 4-5.
+- Senior engineering, product, platform, payments, treasury, infrastructure leaders often score 3-4.
+- Senior security, cyber, risk, fraud, trust, compliance, and operations leaders at relevant accounts should usually score at least 4, not 3.
+- Senior partnerships and business development leaders can be useful connectors at large strategic accounts and should usually score 3-4, not 1-2.
+- Marketing usually scores 1-2.
+- General junior BD, general ops, finance, legal usually score 1-2 unless title strongly indicates crypto ownership.
+- HR, recruiting, PR, office admin, interns, students should score 1.
+- Keep roleFit short, for example: decision_maker, engineering_leader, crypto_owner, product_influence, low_relevance, excluded_role.
+
+Return valid JSON only:
+{
+  "contacts": [
+    {
+      "key": "row-key",
+      "contactScore": 4,
+      "roleFit": "engineering_leader",
+      "reasonSummary": "Engineering leader at a high-fit account."
+    }
+  ]
+}`;
+
 export const DEFAULT_OUTBOUND_PROMPT = `You are an expert GTM copywriter for Turnkey.
 
 Your job is to draft concise outbound for already-qualified leads.

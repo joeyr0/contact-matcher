@@ -56,6 +56,7 @@ export interface PromptEntry {
 
 export interface PromptConfig {
   icpScoring: PromptEntry;
+  contactScoring: PromptEntry;
   outbound: PromptEntry;
 }
 

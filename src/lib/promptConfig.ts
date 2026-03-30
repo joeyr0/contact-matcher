@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { DEFAULT_ICP_PROMPT, DEFAULT_OUTBOUND_PROMPT } from './promptDefaults';
+import { DEFAULT_CONTACT_PROMPT, DEFAULT_ICP_PROMPT, DEFAULT_OUTBOUND_PROMPT } from './promptDefaults';
 import type { PromptConfig } from './types';
 
 function getDataDir(): string {
@@ -14,6 +14,7 @@ function getPromptsPath(): string {
 export function getDefaultPromptConfig(): PromptConfig {
   return {
     icpScoring: { value: DEFAULT_ICP_PROMPT, lastUpdated: null },
+    contactScoring: { value: DEFAULT_CONTACT_PROMPT, lastUpdated: null },
     outbound: { value: DEFAULT_OUTBOUND_PROMPT, lastUpdated: null },
   };
 }
@@ -28,6 +29,10 @@ export function readPromptConfig(): PromptConfig {
       icpScoring: {
         value: parsed.icpScoring?.value || defaults.icpScoring.value,
         lastUpdated: parsed.icpScoring?.lastUpdated ?? null,
+      },
+      contactScoring: {
+        value: parsed.contactScoring?.value || defaults.contactScoring.value,
+        lastUpdated: parsed.contactScoring?.lastUpdated ?? null,
       },
       outbound: {
         value: parsed.outbound?.value || defaults.outbound.value,
