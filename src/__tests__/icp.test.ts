@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyAccountRoute,
   computeLeadPriority,
+  isLowPriorityCommercialRole,
   isKnownCompetitor,
   mapAccountPriority,
   mapContactPriority,
@@ -68,6 +69,11 @@ describe('isKnownCompetitor', () => {
   it('does not flag unrelated companies', () => {
     expect(isKnownCompetitor('Bridge', 'bridge.xyz')).toBe(false);
   });
+
+  it('does not flag broad parent brands when only a product line is competitive', () => {
+    expect(isKnownCompetitor('Coinbase', 'gmail.com')).toBe(false);
+    expect(isKnownCompetitor('Coinbase CDP', 'gmail.com')).toBe(true);
+  });
 });
 
 describe('classifyAccountRoute', () => {
@@ -95,6 +101,12 @@ describe('priority mapping', () => {
     expect(mapContactPriority(4)).toBe('medium');
     expect(mapContactPriority(3)).toBe('low');
     expect(mapContactPriority(1)).toBe('exclude');
+  });
+
+  it('marks BD and Biz Ops as low priority, not exclusion roles', () => {
+    expect(isLowPriorityCommercialRole('BD')).toBe(true);
+    expect(isLowPriorityCommercialRole('Biz Ops')).toBe(true);
+    expect(isLowPriorityCommercialRole('VP Engineering')).toBe(false);
   });
 });
 

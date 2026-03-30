@@ -124,6 +124,18 @@ const OBVIOUS_EXCLUDE_TITLE_PATTERNS = [
   /\bco-?op\b/i,
 ];
 
+const LOW_PRIORITY_TITLE_PATTERNS = [
+  /\bbd\b/i,
+  /\bbusiness development\b/i,
+  /\bbiz dev\b/i,
+  /\bbiz ops\b/i,
+  /\bbusiness ops\b/i,
+  /\bgrowth\b/i,
+  /\bpartnerships?\b/i,
+  /\bmarketing\b/i,
+  /\bsales\b/i,
+];
+
 export interface AccountRoute {
   status: AccountStatus;
   isCompetitor: boolean;
@@ -286,6 +298,11 @@ export function isObviousContactExclude(title: string): boolean {
   return OBVIOUS_EXCLUDE_TITLE_PATTERNS.some((pattern) => pattern.test(title));
 }
 
+export function isLowPriorityCommercialRole(title: string): boolean {
+  if (!title) return false;
+  return LOW_PRIORITY_TITLE_PATTERNS.some((pattern) => pattern.test(title));
+}
+
 export function computeLeadPriority(match: MatchResult): LeadPriority {
   if (!match.accountStatus || match.accountStatus !== 'eligible') return 'do_not_outreach';
   if (match.accountPriority === 'not_target' || match.accountPriority === 'excluded') return 'do_not_outreach';
@@ -365,4 +382,3 @@ export function buildScoreableCompanies(results: EnrichedRow[]): ScoreableCompan
   });
   return [...byKey.values()];
 }
-

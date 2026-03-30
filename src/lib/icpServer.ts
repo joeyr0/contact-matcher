@@ -9,6 +9,7 @@ import {
   getCompanyKey,
   getPreferredCompanyDomain,
   getPreferredCompanyName,
+  isLowPriorityCommercialRole,
   isObviousContactExclude,
   mapAccountPriority,
   mapContactPriority,
@@ -63,6 +64,7 @@ IMPORTANT RULES
 - Fintechs or payments companies with credible crypto expansion can score 4-5.
 - Traditional banks without strong digital-asset evidence should usually stay 2-3.
 - AI companies with no crypto relevance should score 1.
+- Foundations, associations, and ecosystem organizations without clear product or transaction ownership should usually score 2-3, not 4-5.
 - Agencies, consultants, dev shops, and investors are referral sources, not direct outbound targets.
 - Known wallet/key-management competitors should set isCompetitor=true and icpScore=1.
 - If public signal is weak, reduce confidence instead of inflating score.
@@ -361,6 +363,14 @@ export async function scoreEnrichedRows(
       row.match.contactPriority = 'exclude';
       row.match.roleFit = 'excluded_role';
       row.match.contactReasonSummary = 'Non-buyer role for outbound.';
+      return;
+    }
+
+    if (isLowPriorityCommercialRole(contact.title)) {
+      row.match.contactScore = 3;
+      row.match.contactPriority = 'low';
+      row.match.roleFit = 'commercial_low_priority';
+      row.match.contactReasonSummary = 'Commercial contact, but not a primary technical buyer.';
       return;
     }
 
