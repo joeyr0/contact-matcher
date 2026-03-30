@@ -24,9 +24,15 @@ const ENRICHED_HEADERS = [
   'sf_account_name',
   'sf_account_id',
   'sf_account_owner',
+  'stripe_customer_id',
+  'tk_customer_id',
   'sf_opt_out',
   'sf_opt_out_specific_contacts',
   'sf_opt_out_notes',
+  'is_active_customer',
+  'customer_tier',
+  'stripe_subscription_status',
+  'arr_customer_name',
   'match_method',
   'match_confidence',
 ] as const;
@@ -60,9 +66,15 @@ function toFlatRows(headers: string[], results: EnrichedRow[]): FlatRow[] {
     row['sf_account_name'] = match.sfAccountName;
     row['sf_account_id'] = match.sfAccountId;
     row['sf_account_owner'] = match.sfAccountOwner;
+    row['stripe_customer_id'] = match.stripeCustomerId;
+    row['tk_customer_id'] = match.tkCustomerId;
     row['sf_opt_out'] = match.sfOptOut;
     row['sf_opt_out_specific_contacts'] = match.sfOptOutSpecificContacts;
     row['sf_opt_out_notes'] = match.sfOptOutNotes;
+    row['is_active_customer'] = match.isActiveCustomer;
+    row['customer_tier'] = match.customerTier;
+    row['stripe_subscription_status'] = match.stripeSubscriptionStatus;
+    row['arr_customer_name'] = match.arrCustomerName;
     row['match_method'] = match.matchMethod;
     row['match_confidence'] = match.matchConfidence;
     return row;
@@ -109,10 +121,14 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
   }, [filterInput]);
   const [methodFilter, setMethodFilter] = useState<MatchMethodFilter[]>([]);
   const [optOutFilter, setOptOutFilter] = useState<'all' | 'opted_out' | 'specific_only'>('all');
+  const [customerFilter, setCustomerFilter] = useState<'prospects' | 'customers' | 'all'>('prospects');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     sf_account_id: false,
+    tk_customer_id: false,
     sf_opt_out_specific_contacts: false,
     sf_opt_out_notes: false,
+    stripe_subscription_status: false,
+    arr_customer_name: false,
   });
   const [showColPicker, setShowColPicker] = useState(false);
 
@@ -128,6 +144,11 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     else if (optOutFilter === 'specific_only')
       rows = rows.filter((r) => r['sf_opt_out_specific_contacts'] === 'TRUE');
 
+    if (customerFilter === 'prospects')
+      rows = rows.filter((r) => r['is_active_customer'] !== 'TRUE');
+    else if (customerFilter === 'customers')
+      rows = rows.filter((r) => r['is_active_customer'] === 'TRUE');
+
     if (methodFilter.length > 0)
       rows = rows.filter((r) => methodFilter.includes(r['match_method'] as MatchMethodFilter));
 
@@ -139,7 +160,7 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     }
 
     return rows;
-  }, [flatRows, optOutFilter, methodFilter, globalFilter]);
+  }, [flatRows, optOutFilter, customerFilter, methodFilter, globalFilter]);
 
   // Column definitions
   const columns = useMemo((): ColumnDef<FlatRow>[] => {
@@ -196,6 +217,21 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
         accessorFn: (row) => row['sf_account_owner'] ?? '',
       },
       {
+        id: 'stripe_customer_id',
+        header: 'stripe_customer_id',
+        accessorFn: (row) => row['stripe_customer_id'] ?? '',
+        cell: (info) => {
+          const v = info.getValue<string>();
+          if (!v) return null;
+          return <span className="font-mono text-xs text-gray-600">{v}</span>;
+        },
+      },
+      {
+        id: 'tk_customer_id',
+        header: 'tk_customer_id',
+        accessorFn: (row) => row['tk_customer_id'] ?? '',
+      },
+      {
         id: 'sf_opt_out',
         header: 'sf_opt_out',
         accessorFn: (row) => row['sf_opt_out'] ?? '',
@@ -220,6 +256,58 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
         id: 'sf_opt_out_notes',
         header: 'sf_opt_out_notes',
         accessorFn: (row) => row['sf_opt_out_notes'] ?? '',
+      },
+      {
+        id: 'is_active_customer',
+        header: 'is_active_customer',
+        accessorFn: (row) => row['is_active_customer'] ?? '',
+        cell: (info) => {
+          const v = info.getValue<string>();
+          if (v === 'TRUE') {
+            return (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                Active customer
+              </span>
+            );
+          }
+          if (v === 'FALSE') return <span className="text-xs text-gray-400">FALSE</span>;
+          return null;
+        },
+      },
+      {
+        id: 'customer_tier',
+        header: 'customer_tier',
+        accessorFn: (row) => row['customer_tier'] ?? '',
+        cell: (info) => {
+          const v = info.getValue<string>();
+          const isActive = info.row.original['is_active_customer'] === 'TRUE';
+          if (!isActive) return null;
+          if (v === 'Enterprise') {
+            return (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+                Enterprise
+              </span>
+            );
+          }
+          if (v === 'Pro') {
+            return (
+              <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-xs font-semibold text-cyan-800">
+                Pro
+              </span>
+            );
+          }
+          return null;
+        },
+      },
+      {
+        id: 'stripe_subscription_status',
+        header: 'stripe_subscription_status',
+        accessorFn: (row) => row['stripe_subscription_status'] ?? '',
+      },
+      {
+        id: 'arr_customer_name',
+        header: 'arr_customer_name',
+        accessorFn: (row) => row['arr_customer_name'] ?? '',
       },
       {
         id: 'match_method',
@@ -278,6 +366,9 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     specificOnly: flatRows.filter(
       (r) => r['sf_opt_out_specific_contacts'] === 'TRUE' && r['sf_opt_out'] !== 'TRUE',
     ).length,
+    activeCustomers: flatRows.filter((r) => r['is_active_customer'] === 'TRUE').length,
+    enterpriseCustomers: flatRows.filter((r) => r['is_active_customer'] === 'TRUE' && r['customer_tier'] === 'Enterprise').length,
+    proCustomers: flatRows.filter((r) => r['is_active_customer'] === 'TRUE' && r['customer_tier'] === 'Pro').length,
   }), [flatRows]);
 
   // Virtualization
@@ -310,11 +401,12 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     startTransition(() => {
       setMethodFilter([]);
       setOptOutFilter('all');
+      setCustomerFilter('prospects');
       setGlobalFilter('');
     });
   };
 
-  const hasFilters = methodFilter.length > 0 || optOutFilter !== 'all' || filterInput !== '';
+  const hasFilters = methodFilter.length > 0 || optOutFilter !== 'all' || customerFilter !== 'prospects' || filterInput !== '';
 
   return (
     <div className="space-y-3">
@@ -356,6 +448,20 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
             <option value="all">All</option>
             <option value="opted_out">Opted out</option>
             <option value="specific_only">Specific contacts</option>
+          </select>
+        </div>
+
+        {/* Customer blacklist filter */}
+        <div className="flex items-center gap-1.5 text-sm">
+          <span className="text-gray-500">Customers:</span>
+          <select
+            value={customerFilter}
+            onChange={(e) => startTransition(() => setCustomerFilter(e.target.value as typeof customerFilter))}
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none"
+          >
+            <option value="prospects">Prospects only</option>
+            <option value="customers">Active customers</option>
+            <option value="all">All</option>
           </select>
         </div>
 
@@ -435,6 +541,21 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
           <span className="text-amber-700">
             <span className="font-semibold">{stats.specificOnly.toLocaleString()}</span> specific
             contacts
+          </span>
+        )}
+        {stats.activeCustomers > 0 && (
+          <span className="text-slate-700">
+            <span className="font-semibold">{stats.activeCustomers.toLocaleString()}</span> active customers
+          </span>
+        )}
+        {stats.enterpriseCustomers > 0 && (
+          <span className="text-emerald-700">
+            <span className="font-semibold">{stats.enterpriseCustomers.toLocaleString()}</span> enterprise
+          </span>
+        )}
+        {stats.proCustomers > 0 && (
+          <span className="text-cyan-700">
+            <span className="font-semibold">{stats.proCustomers.toLocaleString()}</span> pro
           </span>
         )}
 

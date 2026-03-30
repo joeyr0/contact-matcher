@@ -1,5 +1,5 @@
 import { normalizeDomain, isGenericDomain } from './normalize.js';
-import type { Sheet15Index, OptOutIndex, MatchResult } from './types';
+import type { Sheet15Index, OptOutIndex, CommittedArrIndex, MatchResult } from './types';
 
 export function extractDomain(email: string): string {
   if (!email || typeof email !== 'string') return '';
@@ -12,9 +12,15 @@ const NO_MATCH: MatchResult = {
   sfAccountName: '',
   sfAccountId: '',
   sfAccountOwner: '',
+  stripeCustomerId: '',
+  tkCustomerId: '',
   sfOptOut: '',
   sfOptOutSpecificContacts: '',
   sfOptOutNotes: '',
+  isActiveCustomer: '',
+  customerTier: '',
+  stripeSubscriptionStatus: '',
+  arrCustomerName: '',
   matchMethod: 'no_match',
   matchConfidence: '',
   sfMatchedDomain: '',
@@ -24,6 +30,7 @@ export function matchDomain(
   domain: string,
   sheet15Index: Sheet15Index,
   optOutIndex: OptOutIndex,
+  arrIndex?: CommittedArrIndex | null,
 ): MatchResult {
   if (!domain || isGenericDomain(domain)) {
     return { ...NO_MATCH };
@@ -40,11 +47,18 @@ export function matchDomain(
   const accountName = sheet15Match?.accountName ?? optOutMatch?.accountName ?? '';
   const accountId = sheet15Match?.accountId ?? '';
   const accountOwner = sheet15Match?.accountOwner ?? optOutMatch?.accountOwner ?? '';
+  const stripeCustomerId = (sheet15Match?.stripeCustomerId ?? '').trim();
+  const tkCustomerId = (sheet15Match?.tkCustomerId ?? '').trim();
+
+  const arrMatch = arrIndex && stripeCustomerId ? arrIndex[stripeCustomerId] : null;
+  const hasArr = Boolean(arrIndex);
 
   return {
     sfAccountName: accountName,
     sfAccountId: accountId,
     sfAccountOwner: accountOwner,
+    stripeCustomerId,
+    tkCustomerId,
     sfOptOut: optOutMatch ? (optOutMatch.optOut ? 'TRUE' : 'FALSE') : '',
     sfOptOutSpecificContacts: optOutMatch
       ? optOutMatch.optOutSpecificContacts
@@ -52,6 +66,10 @@ export function matchDomain(
         : 'FALSE'
       : '',
     sfOptOutNotes: optOutMatch?.notes ?? '',
+    isActiveCustomer: hasArr ? (arrMatch?.isActiveCustomer ? 'TRUE' : 'FALSE') : '',
+    customerTier: arrMatch?.customerTier ?? '',
+    stripeSubscriptionStatus: arrMatch?.subscriptionStatus ?? '',
+    arrCustomerName: arrMatch?.customerName ?? '',
     matchMethod: 'exact',
     matchConfidence: 'high',
     sfMatchedDomain: domain,
@@ -103,6 +121,7 @@ export function matchByCompanyName(
   nameIndex: Map<string, string>,
   sheet15Index: Sheet15Index,
   optOutIndex: OptOutIndex,
+  arrIndex?: CommittedArrIndex | null,
 ): MatchResult | null {
   if (!companyName) return null;
   const normalized = normalizeAccountName(companyName);
@@ -112,7 +131,7 @@ export function matchByCompanyName(
   const matchedDomain = nameIndex.get(normalized);
   if (!matchedDomain) return null;
 
-  const base = matchDomain(matchedDomain, sheet15Index, optOutIndex);
+  const base = matchDomain(matchedDomain, sheet15Index, optOutIndex, arrIndex);
   if (base.matchMethod === 'no_match') return null;
 
   return { ...base, matchMethod: 'company_match', matchConfidence: 'medium' };
@@ -128,6 +147,7 @@ export function matchByName(
   nameIndex: Map<string, string>,
   sheet15Index: Sheet15Index,
   optOutIndex: OptOutIndex,
+  arrIndex?: CommittedArrIndex | null,
 ): MatchResult | null {
   const dot = unmatchedDomain.lastIndexOf('.');
   const root = dot !== -1 ? unmatchedDomain.slice(0, dot) : unmatchedDomain;
@@ -141,7 +161,7 @@ export function matchByName(
   const matchedDomain = nameIndex.get(normalizedRoot);
   if (!matchedDomain || matchedDomain === unmatchedDomain) return null;
 
-  const base = matchDomain(matchedDomain, sheet15Index, optOutIndex);
+  const base = matchDomain(matchedDomain, sheet15Index, optOutIndex, arrIndex);
   if (base.matchMethod === 'no_match') return null;
 
   return { ...base, matchMethod: 'name_match', matchConfidence: 'medium' };

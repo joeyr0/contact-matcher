@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extractDomain, matchDomain } from '../lib/matcher';
-import type { Sheet15Index, OptOutIndex } from '../lib/types';
+import type { Sheet15Index, OptOutIndex, CommittedArrIndex } from '../lib/types';
 
 // --- extractDomain ---
 
@@ -165,5 +165,35 @@ describe('matchDomain — multi-domain opt-out expansion', () => {
     expect(result.sfOptOut).toBe('TRUE');
     expect(result.sfAccountId).toBe(''); // not in Sheet15
     expect(result.sfAccountName).toBe('OP Labs / Optimism');
+  });
+});
+
+describe('matchDomain — Stripe ID join to Committed ARR', () => {
+  it('flags active customers and surfaces tier based on Product Name', () => {
+    const sheet15WithStripe: Sheet15Index = {
+      'example.com': {
+        accountId: 'ACC999',
+        accountName: 'Example Inc',
+        accountOwner: 'Owner',
+        stripeCustomerId: 'cus_123',
+      },
+    };
+
+    const arr: CommittedArrIndex = {
+      'cus_123': {
+        customerId: 'cus_123',
+        customerName: 'Example Inc',
+        accountOwner: 'Owner',
+        subscriptionStatus: 'active',
+        isActiveCustomer: true,
+        customerTier: 'Enterprise',
+      },
+    };
+
+    const result = matchDomain('example.com', sheet15WithStripe, optOut, arr);
+    expect(result.stripeCustomerId).toBe('cus_123');
+    expect(result.isActiveCustomer).toBe('TRUE');
+    expect(result.customerTier).toBe('Enterprise');
+    expect(result.stripeSubscriptionStatus).toBe('active');
   });
 });

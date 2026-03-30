@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import formidable from 'formidable';
 import fs from 'fs';
-import { buildSheet15Index, buildOptOutIndex } from '../../src/lib/indexer.js';
+import { buildSheet15Index, buildOptOutIndex, buildCommittedArrIndex } from '../../src/lib/indexer.js';
 import { readDataJSON, writeDataJSON } from '../lib/readData.js';
 import type { ReferenceStatus } from '../../src/lib/types.js';
 
@@ -13,8 +13,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const type = req.query['type'];
-  if (type !== 'sheet15' && type !== 'optout') {
-    return res.status(400).json({ error: 'Invalid type parameter. Must be sheet15 or optout.' });
+  if (type !== 'sheet15' && type !== 'optout' && type !== 'arr') {
+    return res.status(400).json({ error: 'Invalid type parameter. Must be sheet15, optout, or arr.' });
   }
 
   const form = formidable({ maxFileSize: 100 * 1024 * 1024, uploadDir: '/tmp' });
@@ -39,31 +39,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const parseResult = type === 'sheet15' ? buildSheet15Index(csvText) : buildOptOutIndex(csvText);
+    const parseResult =
+      type === 'sheet15'
+        ? buildSheet15Index(csvText)
+        : type === 'optout'
+          ? buildOptOutIndex(csvText)
+          : buildCommittedArrIndex(csvText);
 
     if (parseResult.error) {
       return res.status(400).json({ error: parseResult.error });
     }
 
-    const blobKey = type === 'sheet15' ? 'sheet15-index.json' : 'optout-index.json';
+    const blobKey = type === 'sheet15' ? 'sheet15-index.json' : type === 'optout' ? 'optout-index.json' : 'committed-arr-index.json';
     writeDataJSON(blobKey, parseResult.index);
 
     const meta = readDataJSON<ReferenceStatus>('metadata.json') ?? {
       sheet15: { loaded: false, rowCount: 0, uniqueDomains: 0, lastUpdated: null },
       optout:  { loaded: false, rowCount: 0, uniqueDomains: 0, lastUpdated: null },
+      arr:     { loaded: false, rowCount: 0, uniqueCustomers: 0, lastUpdated: null },
     };
-    meta[type] = {
-      loaded: true,
-      rowCount: parseResult.rowCount,
-      uniqueDomains: parseResult.uniqueDomains,
-      lastUpdated: new Date().toISOString(),
-    };
+    if (type === 'arr') {
+      meta.arr = {
+        loaded: true,
+        rowCount: parseResult.rowCount,
+        uniqueCustomers: parseResult.uniqueCount,
+        lastUpdated: new Date().toISOString(),
+      };
+    } else {
+      meta[type] = {
+        loaded: true,
+        rowCount: parseResult.rowCount,
+        uniqueDomains: parseResult.uniqueCount,
+        lastUpdated: new Date().toISOString(),
+      };
+    }
     writeDataJSON('metadata.json', meta);
 
     return res.status(200).json({
       success: true,
       rowCount: parseResult.rowCount,
-      uniqueDomains: parseResult.uniqueDomains,
+      uniqueCount: parseResult.uniqueCount,
+      uniqueLabel: type === 'arr' ? 'customers' : 'domains',
       skippedRows: parseResult.skippedRows,
     });
   } catch (err) {

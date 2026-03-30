@@ -4,6 +4,8 @@
 
 Takes a CSV of contacts (emails or websites) and enriches each row with Salesforce account data — owner, account name, opt-out status — by matching the contact's domain against the Salesforce reference data.
 
+Optionally, if Committed ARR is uploaded, the matcher flags active customers (Stripe `Customer ID`) and assigns a customer tier (`Enterprise` vs `Pro`) based on the ARR `Product Name`. In the results UI, the default view is "Prospects only" (active customers hidden).
+
 ---
 
 ## Matching Pipeline
@@ -70,9 +72,12 @@ Each contact runs through the following tiers in order. The first tier that find
 | `sf_account_name` | Salesforce account name |
 | `sf_account_id` | Salesforce account ID |
 | `sf_account_owner` | Account owner from Salesforce |
+| `stripe_customer_id` | Stripe Customer ID (`cus_...`) from Salesforce (used for ARR join) |
 | `sf_opt_out` | TRUE / FALSE — full opt-out flag |
 | `sf_opt_out_specific_contacts` | TRUE / FALSE — specific contacts only |
 | `sf_opt_out_notes` | Notes on who is opted out |
+| `is_active_customer` | TRUE / FALSE — active (or past due) customer from Committed ARR |
+| `customer_tier` | Enterprise / Pro (from Committed ARR `Product Name`) |
 | `match_method` | exact / redirect / name_match / company_match / fuzzy / no_match |
 | `match_confidence` | high / medium / low |
 

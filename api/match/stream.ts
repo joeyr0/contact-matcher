@@ -5,7 +5,7 @@ import { parseContactCSV } from '../../src/lib/csv.js';
 import { normalizeDomain } from '../../src/lib/normalize.js';
 import { extractDomain, matchDomain } from '../../src/lib/matcher.js';
 import { readDataJSON } from '../lib/readData.js';
-import type { Sheet15Index, OptOutIndex, EnrichedRow } from '../../src/lib/types.js';
+import type { Sheet15Index, OptOutIndex, CommittedArrIndex, EnrichedRow } from '../../src/lib/types.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -39,6 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sheet15Index = readDataJSON<Sheet15Index>('sheet15-index.json');
   const optOutIndex = readDataJSON<OptOutIndex>('optout-index.json');
+  const arrIndex = readDataJSON<CommittedArrIndex>('committed-arr-index.json');
   if (!sheet15Index || !optOutIndex) {
     return res.status(503).json({ error: 'Reference data not available. Contact your admin.' });
   }
@@ -58,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const rawValue = (row[emailColIdx] ?? '').trim();
     const domain = isDomainColumn ? normalizeDomain(rawValue) : extractDomain(rawValue);
     const companyName = companyColIdx >= 0 ? (row[companyColIdx] ?? '').trim() : '';
-    const match = matchDomain(domain, sheet15Index, optOutIndex);
+    const match = matchDomain(domain, sheet15Index, optOutIndex, arrIndex);
     results.push({ originalRow: row, domain, companyName, match });
 
     if ((i + 1) % 50 === 0 || i === rows.length - 1) {

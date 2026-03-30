@@ -5,7 +5,7 @@ import { checkRedirects } from '../src/lib/redirect.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
 import { matchByName, matchByCompanyName, buildAccountNameIndex, matchDomain } from '../src/lib/matcher.js';
 import { readDataJSON } from './lib/readData.js';
-import type { Sheet15Index, OptOutIndex, FuzzyBatchResult } from '../src/lib/types.js';
+import type { Sheet15Index, OptOutIndex, CommittedArrIndex, FuzzyBatchResult } from '../src/lib/types.js';
 
 // Module-level caches — survive across warm invocations on the same Lambda instance
 let _domainLookupCache: DomainLookup | null = null;
@@ -28,6 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const sheet15Index = readDataJSON<Sheet15Index>('sheet15-index.json');
   const optOutIndex = readDataJSON<OptOutIndex>('optout-index.json');
+  const arrIndex = readDataJSON<CommittedArrIndex>('committed-arr-index.json');
   if (!sheet15Index || !optOutIndex) {
     return res.status(503).json({ error: 'Reference data not available.' });
   }
@@ -44,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const needsLLM: string[] = [];
 
   for (const domain of validDomains) {
-    const nameMatch = matchByName(domain, _accountNameIndexCache, sheet15Index, optOutIndex);
+    const nameMatch = matchByName(domain, _accountNameIndexCache, sheet15Index, optOutIndex, arrIndex);
     if (nameMatch) {
       validatedMatches[domain] = nameMatch;
       matched.add(domain);
@@ -65,7 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   for (const domain of needsLLM) {
     const redirectedDomain = redirectMap.get(domain);
     if (redirectedDomain) {
-      const base = matchDomain(redirectedDomain, sheet15Index, optOutIndex);
+      const base = matchDomain(redirectedDomain, sheet15Index, optOutIndex, arrIndex);
       if (base.matchMethod !== 'no_match') {
         validatedMatches[domain] = { ...base, matchMethod: 'redirect', matchConfidence: 'high' };
         matched.add(domain);
@@ -87,7 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   for (const domain of needsLLMAfterRedirect) {
     const companyName = companyNames[domain] ?? '';
     if (companyName && _accountNameIndexCache) {
-      const companyMatch = matchByCompanyName(companyName, _accountNameIndexCache, sheet15Index, optOutIndex);
+      const companyMatch = matchByCompanyName(companyName, _accountNameIndexCache, sheet15Index, optOutIndex, arrIndex);
       if (companyMatch) {
         validatedMatches[domain] = companyMatch;
         matched.add(domain);
@@ -150,7 +151,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.warn(`[fuzzy] Hallucination: ${unmatchedDomain} → ${matchedDomain}`);
       continue;
     }
-    const base = matchDomain(matchedDomain, sheet15Index, optOutIndex);
+    const base = matchDomain(matchedDomain, sheet15Index, optOutIndex, arrIndex);
     validatedMatches[unmatchedDomain] = { ...base, matchMethod: 'fuzzy', matchConfidence: confidence };
     matched.add(unmatchedDomain);
   }

@@ -122,7 +122,7 @@ export default function FuzzyMatcher({ results, onFuzzyUpdates }: FuzzyMatcherPr
               {unmatchedDomains.length.toLocaleString()} unmatched domains eligible for fuzzy matching
             </p>
             <p className="mt-0.5 text-xs text-purple-600">
-              {totalBatches} batch{totalBatches !== 1 ? 'es' : ''} of {BATCH_SIZE} · powered by Claude
+              {totalBatches} batch{totalBatches !== 1 ? 'es' : ''} of {BATCH_SIZE} · powered by OpenAI
             </p>
           </div>
           <button

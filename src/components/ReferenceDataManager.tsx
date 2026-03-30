@@ -25,8 +25,8 @@ function isStale(iso: string | null): boolean {
 interface UploadZoneProps {
   label: string;
   description: string;
-  type: 'sheet15' | 'optout';
-  status: ReferenceStatus['sheet15'] | ReferenceStatus['optout'];
+  type: 'sheet15' | 'optout' | 'arr';
+  status: ReferenceStatus['sheet15'] | ReferenceStatus['optout'] | ReferenceStatus['arr'];
   onUploadComplete: () => void;
 }
 
@@ -34,6 +34,9 @@ function UploadZone({ label, description, type, status, onUploadComplete }: Uplo
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const uniqueCount =
+    'uniqueDomains' in status ? status.uniqueDomains : status.uniqueCustomers;
+  const uniqueLabel = 'uniqueDomains' in status ? 'domains' : 'customers';
 
   const onDrop = useCallback(
     async (accepted: File[]) => {
@@ -64,7 +67,7 @@ function UploadZone({ label, description, type, status, onUploadComplete }: Uplo
           setError(data.error ?? `Upload failed (HTTP ${res.status})`);
         } else {
           setSuccessMsg(
-            `${data.rowCount.toLocaleString()} rows loaded (${data.uniqueDomains.toLocaleString()} unique domains)` +
+            `${data.rowCount.toLocaleString()} rows loaded (${data.uniqueCount.toLocaleString()} unique ${data.uniqueLabel})` +
               (data.skippedRows > 0 ? ` — ${data.skippedRows} rows skipped` : ''),
           );
           onUploadComplete();
@@ -110,7 +113,7 @@ function UploadZone({ label, description, type, status, onUploadComplete }: Uplo
       {status.loaded && (
         <div className="mb-4 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-600">
           <span className="font-medium">{status.rowCount.toLocaleString()}</span> rows &nbsp;·&nbsp;
-          <span className="font-medium">{status.uniqueDomains.toLocaleString()}</span> unique domains
+          <span className="font-medium">{uniqueCount.toLocaleString()}</span> unique {uniqueLabel}
           &nbsp;·&nbsp;
           <span className={stale ? 'text-yellow-700' : ''}>{formatDate(status.lastUpdated)}</span>
         </div>
@@ -170,6 +173,7 @@ export default function ReferenceDataManager() {
   const [status, setStatus] = useState<ReferenceStatus>({
     sheet15: { loaded: false, rowCount: 0, uniqueDomains: 0, lastUpdated: null },
     optout: { loaded: false, rowCount: 0, uniqueDomains: 0, lastUpdated: null },
+    arr: { loaded: false, rowCount: 0, uniqueCustomers: 0, lastUpdated: null },
   });
   const [statusError, setStatusError] = useState<string | null>(null);
 
@@ -189,15 +193,15 @@ export default function ReferenceDataManager() {
     void fetchStatus();
   }, [fetchStatus]);
 
-  const bothLoaded = status.sheet15.loaded && status.optout.loaded;
+  const readyToMatch = status.sheet15.loaded && status.optout.loaded;
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-gray-900">Reference Data</h2>
         <p className="mt-1 text-sm text-gray-500">
-          Upload the two Salesforce CSV exports. This is required before running contact matching.
-          Refresh monthly when Salesforce data changes.
+          Upload your Salesforce CSV exports to enable matching. Uploading Committed ARR enables
+          active-customer flagging (and the default view hides active customers).
         </p>
       </div>
 
@@ -207,16 +211,21 @@ export default function ReferenceDataManager() {
         </div>
       )}
 
-      {bothLoaded && (
+      {readyToMatch && (
         <div className="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">
           Both datasets loaded — ready to run contact matching.
+        </div>
+      )}
+      {readyToMatch && !status.arr.loaded && (
+        <div className="rounded-lg bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+          Committed ARR not loaded — active-customer blacklist is disabled.
         </div>
       )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <UploadZone
-          label="Sheet15 (Website → Account)"
-          description="salesforce_accoutns-_Sheet15.csv — ~18,648 rows"
+          label="Salesforce Accounts (Website → Account)"
+          description="salesforce_all_accounts.csv — includes Stripe ID"
           type="sheet15"
           status={status.sheet15}
           onUploadComplete={fetchStatus}
@@ -226,6 +235,13 @@ export default function ReferenceDataManager() {
           description="Opt-out_-_Sales_Opt_out_All.csv — ~3,550 rows"
           type="optout"
           status={status.optout}
+          onUploadComplete={fetchStatus}
+        />
+        <UploadZone
+          label="Committed ARR (Active Customers)"
+          description="Turnkey Topline Metrics.xlsx - Committed ARR.csv — keyed by Stripe Customer ID"
+          type="arr"
+          status={status.arr}
           onUploadComplete={fetchStatus}
         />
       </div>
