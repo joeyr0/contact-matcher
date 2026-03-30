@@ -4,6 +4,7 @@ import ContactUpload from './components/ContactUpload';
 import MatchProgress from './components/MatchProgress';
 import ResultsTable from './components/ResultsTable';
 import FuzzyMatcher from './components/FuzzyMatcher';
+import IcpScorer from './components/IcpScorer';
 import type { EnrichedRow, MatchResult, ReferenceStatus } from './lib/types';
 
 type Tab = 'reference' | 'match';
@@ -141,6 +142,12 @@ export default function App() {
             {matchState === 'complete' && (
               <>
                 <FuzzyMatcher results={results} onFuzzyUpdates={handleFuzzyUpdates} />
+                <IcpScorer
+                  headers={resultHeaders}
+                  results={results}
+                  onComplete={setResults}
+                  onError={setMatchError}
+                />
                 <ResultsTable headers={resultHeaders} results={results} onReset={handleReset} />
               </>
             )}

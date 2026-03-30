@@ -9,6 +9,7 @@ import { buildSheet15Index, buildOptOutIndex, buildCommittedArrIndex } from '../
 import { parseContactCSV } from '../src/lib/csv.js';
 import { normalizeDomain } from '../src/lib/normalize.js';
 import { extractDomain, matchDomain, getCustomerLookup, findPossibleCustomerMatch } from '../src/lib/matcher.js';
+import { scoreEnrichedRows } from '../src/lib/icpServer.js';
 import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import { checkRedirects } from '../src/lib/redirect.js';
 import { matchByCompanyName } from '../src/lib/matcher.js';
@@ -284,6 +285,38 @@ app.post('/api/match/stream', (req, res) => {
     send({ type: 'complete', headers, results });
     res.end();
   });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/icp-score/stream
+// ---------------------------------------------------------------------------
+
+app.post('/api/icp-score/stream', async (req, res) => {
+  const { headers, results } = req.body as { headers?: unknown; results?: unknown };
+  if (!Array.isArray(headers) || !Array.isArray(results)) {
+    res.status(400).json({ error: 'headers and results are required arrays' });
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  try {
+    const scored = await scoreEnrichedRows(
+      headers as string[],
+      results as EnrichedRow[],
+      (stage, processed, total) => send({ type: 'progress', stage, processed, total }),
+    );
+    send({ type: 'complete', results: scored });
+    res.end();
+  } catch (error) {
+    send({ type: 'error', error: error instanceof Error ? error.message : String(error) });
+    res.end();
+  }
 });
 
 // ---------------------------------------------------------------------------

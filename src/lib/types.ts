@@ -77,6 +77,20 @@ export interface MatchResult {
   customerTier: 'Enterprise' | 'Pro' | '';
   stripeSubscriptionStatus: string;
   arrCustomerName: string;
+  accountStatus: '' | 'eligible' | 'opted_out' | 'customer' | 'customer_review' | 'competitor' | 'referral_source';
+  accountPriority: '' | 'p0' | 'p1' | 'p2' | 'not_target' | 'excluded';
+  icpScore: '' | 1 | 2 | 3 | 4 | 5;
+  icpConfidence: '' | 'high' | 'medium' | 'low';
+  primaryUseCase: string;
+  tvcScore: '' | 1 | 2 | 3 | 4 | 5;
+  tvcRelevance: '' | 'high' | 'medium' | 'low';
+  icpReasonSummary: string;
+  isCompetitor: '' | 'TRUE' | 'FALSE';
+  contactScore: '' | 1 | 2 | 3 | 4 | 5;
+  contactPriority: '' | 'high' | 'medium' | 'low' | 'exclude';
+  roleFit: string;
+  contactReasonSummary: string;
+  leadPriority: '' | 'direct' | 'queue' | 'hold' | 'do_not_outreach';
   matchMethod: 'exact' | 'redirect' | 'name_match' | 'company_match' | 'fuzzy' | 'no_match';
   matchConfidence: 'high' | 'medium' | 'low' | '';
   sfMatchedDomain: string; // the Sheet15 domain that was actually matched
@@ -92,6 +106,11 @@ export interface EnrichedRow {
 export type MatchStreamEvent =
   | { type: 'progress'; processed: number; total: number }
   | { type: 'complete'; headers: string[]; results: EnrichedRow[]; error?: never }
+  | { type: 'error'; error: string };
+
+export type IcpScoreStreamEvent =
+  | { type: 'progress'; stage: 'companies' | 'contacts'; processed: number; total: number }
+  | { type: 'complete'; results: EnrichedRow[]; error?: never }
   | { type: 'error'; error: string };
 
 export interface FuzzyBatchRequest {

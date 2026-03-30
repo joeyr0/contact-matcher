@@ -36,6 +36,19 @@ const ENRICHED_HEADERS = [
   'customer_tier',
   'stripe_subscription_status',
   'arr_customer_name',
+  'account_status',
+  'account_priority',
+  'icp_score',
+  'icp_confidence',
+  'primary_use_case',
+  'tvc_relevance',
+  'icp_reason_summary',
+  'is_competitor',
+  'contact_score',
+  'contact_priority',
+  'role_fit',
+  'contact_reason_summary',
+  'lead_priority',
   'match_method',
   'match_confidence',
 ] as const;
@@ -53,6 +66,8 @@ const METHOD_BADGE: Record<string, string> = {
 };
 
 type MatchMethodFilter = 'exact' | 'redirect' | 'name_match' | 'company_match' | 'fuzzy' | 'no_match';
+type LeadFilter = 'all' | 'direct' | 'queue' | 'hold' | 'do_not_outreach';
+type AccountPriorityFilter = 'all' | 'p0' | 'p1' | 'p2' | 'not_target' | 'excluded';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -81,6 +96,19 @@ function toFlatRows(headers: string[], results: EnrichedRow[]): FlatRow[] {
     row['customer_tier'] = match.customerTier;
     row['stripe_subscription_status'] = match.stripeSubscriptionStatus;
     row['arr_customer_name'] = match.arrCustomerName;
+    row['account_status'] = match.accountStatus;
+    row['account_priority'] = match.accountPriority;
+    row['icp_score'] = match.icpScore === '' ? '' : String(match.icpScore);
+    row['icp_confidence'] = match.icpConfidence;
+    row['primary_use_case'] = match.primaryUseCase;
+    row['tvc_relevance'] = match.tvcRelevance;
+    row['icp_reason_summary'] = match.icpReasonSummary;
+    row['is_competitor'] = match.isCompetitor;
+    row['contact_score'] = match.contactScore === '' ? '' : String(match.contactScore);
+    row['contact_priority'] = match.contactPriority;
+    row['role_fit'] = match.roleFit;
+    row['contact_reason_summary'] = match.contactReasonSummary;
+    row['lead_priority'] = match.leadPriority;
     row['match_method'] = match.matchMethod;
     row['match_confidence'] = match.matchConfidence;
     return row;
@@ -128,6 +156,8 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
   const [methodFilter, setMethodFilter] = useState<MatchMethodFilter[]>([]);
   const [optOutFilter, setOptOutFilter] = useState<'all' | 'opted_out' | 'specific_only'>('all');
   const [customerFilter, setCustomerFilter] = useState<'all' | 'customers' | 'review' | 'prospects'>('all');
+  const [leadFilter, setLeadFilter] = useState<LeadFilter>('all');
+  const [accountPriorityFilter, setAccountPriorityFilter] = useState<AccountPriorityFilter>('all');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     sf_account_id: false,
     tk_customer_id: false,
@@ -136,6 +166,10 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     possible_customer_reason: false,
     stripe_subscription_status: false,
     arr_customer_name: false,
+    icp_reason_summary: false,
+    is_competitor: false,
+    role_fit: false,
+    contact_reason_summary: false,
   });
   const [showColPicker, setShowColPicker] = useState(false);
 
@@ -161,6 +195,12 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     if (methodFilter.length > 0)
       rows = rows.filter((r) => methodFilter.includes(r['match_method'] as MatchMethodFilter));
 
+    if (leadFilter !== 'all')
+      rows = rows.filter((r) => r['lead_priority'] === leadFilter);
+
+    if (accountPriorityFilter !== 'all')
+      rows = rows.filter((r) => r['account_priority'] === accountPriorityFilter);
+
     if (globalFilter) {
       const lf = globalFilter.toLowerCase();
       rows = rows.filter((r) =>
@@ -183,6 +223,88 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     }));
 
     const enrichedCols: ColumnDef<FlatRow>[] = [
+      {
+        id: 'lead_priority',
+        header: 'lead_priority',
+        accessorFn: (row) => row['lead_priority'] ?? '',
+        cell: (info) => {
+          const v = info.getValue<string>();
+          if (v === 'direct') return <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">Direct</span>;
+          if (v === 'queue') return <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">Queue</span>;
+          if (v === 'hold') return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Hold</span>;
+          if (v === 'do_not_outreach') return <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">Do not outreach</span>;
+          return null;
+        },
+      },
+      {
+        id: 'account_status',
+        header: 'account_status',
+        accessorFn: (row) => row['account_status'] ?? '',
+      },
+      {
+        id: 'account_priority',
+        header: 'account_priority',
+        accessorFn: (row) => row['account_priority'] ?? '',
+        cell: (info) => {
+          const v = info.getValue<string>();
+          if (v === 'p0') return <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">P0</span>;
+          if (v === 'p1') return <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">P1</span>;
+          if (v === 'p2') return <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">P2</span>;
+          if (v === 'not_target') return <span className="text-xs text-gray-500">Not target</span>;
+          if (v === 'excluded') return <span className="text-xs text-gray-500">Excluded</span>;
+          return null;
+        },
+      },
+      {
+        id: 'icp_score',
+        header: 'icp_score',
+        accessorFn: (row) => row['icp_score'] ?? '',
+      },
+      {
+        id: 'icp_confidence',
+        header: 'icp_confidence',
+        accessorFn: (row) => row['icp_confidence'] ?? '',
+      },
+      {
+        id: 'primary_use_case',
+        header: 'primary_use_case',
+        accessorFn: (row) => row['primary_use_case'] ?? '',
+      },
+      {
+        id: 'tvc_relevance',
+        header: 'tvc_relevance',
+        accessorFn: (row) => row['tvc_relevance'] ?? '',
+      },
+      {
+        id: 'icp_reason_summary',
+        header: 'icp_reason_summary',
+        accessorFn: (row) => row['icp_reason_summary'] ?? '',
+      },
+      {
+        id: 'is_competitor',
+        header: 'is_competitor',
+        accessorFn: (row) => row['is_competitor'] ?? '',
+      },
+      {
+        id: 'contact_score',
+        header: 'contact_score',
+        accessorFn: (row) => row['contact_score'] ?? '',
+      },
+      {
+        id: 'contact_priority',
+        header: 'contact_priority',
+        accessorFn: (row) => row['contact_priority'] ?? '',
+      },
+      {
+        id: 'role_fit',
+        header: 'role_fit',
+        accessorFn: (row) => row['role_fit'] ?? '',
+      },
+      {
+        id: 'contact_reason_summary',
+        header: 'contact_reason_summary',
+        accessorFn: (row) => row['contact_reason_summary'] ?? '',
+      },
       {
         id: 'contact_website',
         header: 'contact_website',
@@ -397,6 +519,14 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     specificOnly: flatRows.filter(
       (r) => r['sf_opt_out_specific_contacts'] === 'TRUE' && r['sf_opt_out'] !== 'TRUE',
     ).length,
+    direct: flatRows.filter((r) => r['lead_priority'] === 'direct').length,
+    queue: flatRows.filter((r) => r['lead_priority'] === 'queue').length,
+    hold: flatRows.filter((r) => r['lead_priority'] === 'hold').length,
+    doNotOutreach: flatRows.filter((r) => r['lead_priority'] === 'do_not_outreach').length,
+    p0: flatRows.filter((r) => r['account_priority'] === 'p0').length,
+    p1: flatRows.filter((r) => r['account_priority'] === 'p1').length,
+    p2: flatRows.filter((r) => r['account_priority'] === 'p2').length,
+    competitors: flatRows.filter((r) => r['account_status'] === 'competitor').length,
     customersYes: flatRows.filter((r) => r['is_customer'] === 'yes').length,
     customersMaybe: flatRows.filter((r) => r['is_customer'] === 'maybe').length,
     enterpriseCustomers: flatRows.filter((r) => r['is_customer'] !== 'no' && r['customer_tier'] === 'Enterprise').length,
@@ -434,11 +564,13 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
       setMethodFilter([]);
       setOptOutFilter('all');
       setCustomerFilter('all');
+      setLeadFilter('all');
+      setAccountPriorityFilter('all');
       setGlobalFilter('');
     });
   };
 
-  const hasFilters = methodFilter.length > 0 || optOutFilter !== 'all' || customerFilter !== 'all' || filterInput !== '';
+  const hasFilters = methodFilter.length > 0 || optOutFilter !== 'all' || customerFilter !== 'all' || leadFilter !== 'all' || accountPriorityFilter !== 'all' || filterInput !== '';
 
   return (
     <div className="space-y-3">
@@ -495,6 +627,37 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
             <option value="customers">Customers</option>
             <option value="review">Maybe customers</option>
             <option value="prospects">Prospects only</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-1.5 text-sm">
+          <span className="text-gray-500">Lead:</span>
+          <select
+            value={leadFilter}
+            onChange={(e) => startTransition(() => setLeadFilter(e.target.value as LeadFilter))}
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none"
+          >
+            <option value="all">All</option>
+            <option value="direct">Direct</option>
+            <option value="queue">Queue</option>
+            <option value="hold">Hold</option>
+            <option value="do_not_outreach">Do not outreach</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-1.5 text-sm">
+          <span className="text-gray-500">Account:</span>
+          <select
+            value={accountPriorityFilter}
+            onChange={(e) => startTransition(() => setAccountPriorityFilter(e.target.value as AccountPriorityFilter))}
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:outline-none"
+          >
+            <option value="all">All</option>
+            <option value="p0">P0</option>
+            <option value="p1">P1</option>
+            <option value="p2">P2</option>
+            <option value="not_target">Not target</option>
+            <option value="excluded">Excluded</option>
           </select>
         </div>
 
@@ -568,6 +731,41 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
         {stats.optedOut > 0 && (
           <span className="text-red-700">
             <span className="font-semibold">{stats.optedOut.toLocaleString()}</span> opted out
+          </span>
+        )}
+        {stats.direct > 0 && (
+          <span className="text-emerald-700">
+            <span className="font-semibold">{stats.direct.toLocaleString()}</span> direct
+          </span>
+        )}
+        {stats.queue > 0 && (
+          <span className="text-blue-700">
+            <span className="font-semibold">{stats.queue.toLocaleString()}</span> queue
+          </span>
+        )}
+        {stats.hold > 0 && (
+          <span className="text-amber-700">
+            <span className="font-semibold">{stats.hold.toLocaleString()}</span> hold
+          </span>
+        )}
+        {stats.p0 > 0 && (
+          <span className="text-emerald-700">
+            <span className="font-semibold">{stats.p0.toLocaleString()}</span> P0
+          </span>
+        )}
+        {stats.p1 > 0 && (
+          <span className="text-blue-700">
+            <span className="font-semibold">{stats.p1.toLocaleString()}</span> P1
+          </span>
+        )}
+        {stats.p2 > 0 && (
+          <span className="text-violet-700">
+            <span className="font-semibold">{stats.p2.toLocaleString()}</span> P2
+          </span>
+        )}
+        {stats.competitors > 0 && (
+          <span className="text-gray-700">
+            <span className="font-semibold">{stats.competitors.toLocaleString()}</span> competitors
           </span>
         )}
         {stats.specificOnly > 0 && (
@@ -678,6 +876,8 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
               const isSpecificOnly =
                 row.original['sf_opt_out_specific_contacts'] === 'TRUE' &&
                 row.original['sf_opt_out'] !== 'TRUE';
+              const isDirect = row.original['lead_priority'] === 'direct';
+              const isQueue = row.original['lead_priority'] === 'queue';
               const isCustomerMaybe = row.original['is_customer'] === 'maybe';
               const isCustomerYes = row.original['is_customer'] === 'yes' && row.original['sf_opt_out'] !== 'TRUE';
               return (
@@ -686,6 +886,10 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
                   className={
                     isOptedOut
                       ? 'bg-red-50 hover:bg-red-100'
+                      : isDirect
+                        ? 'bg-emerald-50 hover:bg-emerald-100'
+                      : isQueue
+                        ? 'bg-blue-50 hover:bg-blue-100'
                       : isCustomerMaybe
                         ? 'bg-amber-50 hover:bg-amber-100'
                       : isCustomerYes
@@ -722,8 +926,18 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
       </div>
 
       {/* Specific contacts opt-out legend */}
-      {(stats.optedOut > 0 || stats.specificOnly > 0 || stats.customersMaybe > 0 || stats.customersYes > 0) && (
+      {(stats.optedOut > 0 || stats.specificOnly > 0 || stats.customersMaybe > 0 || stats.customersYes > 0 || stats.direct > 0 || stats.queue > 0) && (
         <div className="flex gap-4 text-xs text-gray-500">
+          {stats.direct > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-3 w-3 rounded-sm bg-emerald-100" /> Direct outreach
+            </span>
+          )}
+          {stats.queue > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-3 w-3 rounded-sm bg-blue-100" /> Queue
+            </span>
+          )}
           {stats.optedOut > 0 && (
             <span className="flex items-center gap-1">
               <span className="inline-block h-3 w-3 rounded-sm bg-red-100" /> Full opt-out
