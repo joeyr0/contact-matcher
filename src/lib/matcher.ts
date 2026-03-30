@@ -19,6 +19,9 @@ const NO_MATCH: MatchResult = {
   sfOptOutNotes: '',
   isActiveCustomer: '',
   customerMatchMethod: '',
+  possibleCustomer: '',
+  possibleCustomerConfidence: '',
+  possibleCustomerReason: '',
   customerTier: '',
   stripeSubscriptionStatus: '',
   arrCustomerName: '',
@@ -29,6 +32,11 @@ const NO_MATCH: MatchResult = {
 
 interface CustomerLookup {
   activeByCanonicalName: Map<string, CommittedArrIndex[string]>;
+  activeCustomers: Array<{
+    record: CommittedArrIndex[string];
+    canonicalName: string;
+    tokens: string[];
+  }>;
 }
 
 const customerLookupCache = new WeakMap<CommittedArrIndex, CustomerLookup>();
@@ -48,6 +56,55 @@ function getDomainRoot(domain: string): string {
   return innerDot !== -1 ? root.slice(innerDot + 1) : root;
 }
 
+function tokenizeCustomerName(name: string): string[] {
+  const cleaned = name
+    .toLowerCase()
+    .replace(/\((prod|production|dev|development|staging|stage|testing|test|sandbox)\)/gi, ' ')
+    .replace(/\b(prod|production|dev|development|staging|stage|testing|test|sandbox)\b/gi, ' ')
+    .replace(/\b(inc|llc|ltd|corp|corporation|technologies|technology|tech|labs|lab|protocol|foundation|dao|finance|financial|networks?|systems|group|holdings|ventures?|capital|partners?|global|digital|solutions|studios?|platforms?|services|software)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+  if (!cleaned) return [];
+  return cleaned.split(/\s+/).filter((token) => token.length >= 3);
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a) return b.length;
+  if (!b) return a.length;
+
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  const next = new Array<number>(b.length + 1);
+
+  for (let i = 0; i < a.length; i++) {
+    next[0] = i + 1;
+    for (let j = 0; j < b.length; j++) {
+      const cost = a[i] === b[j] ? 0 : 1;
+      next[j + 1] = Math.min(
+        next[j] + 1,
+        prev[j + 1] + 1,
+        prev[j] + cost,
+      );
+    }
+    for (let j = 0; j <= b.length; j++) prev[j] = next[j] ?? 0;
+  }
+
+  return prev[b.length] ?? 0;
+}
+
+function normalizedSimilarity(a: string, b: string): number {
+  const longest = Math.max(a.length, b.length);
+  if (longest === 0) return 1;
+  return 1 - levenshtein(a, b) / longest;
+}
+
+interface PossibleCustomerMatch {
+  record: CommittedArrIndex[string];
+  confidence: 'medium' | 'low';
+  reason: string;
+}
+
 function choosePreferredCustomer(
   current: CommittedArrIndex[string] | undefined,
   next: CommittedArrIndex[string],
@@ -63,6 +120,7 @@ function getCustomerLookup(arrIndex: CommittedArrIndex): CustomerLookup {
   if (cached) return cached;
 
   const activeByCanonicalName = new Map<string, CommittedArrIndex[string]>();
+  const activeCustomers: CustomerLookup['activeCustomers'] = [];
   for (const record of Object.values(arrIndex)) {
     if (!record.isActiveCustomer) continue;
     const canonical = canonicalizeCustomerName(record.customerName);
@@ -71,11 +129,93 @@ function getCustomerLookup(arrIndex: CommittedArrIndex): CustomerLookup {
       canonical,
       choosePreferredCustomer(activeByCanonicalName.get(canonical), record),
     );
+    activeCustomers.push({
+      record,
+      canonicalName: canonical,
+      tokens: tokenizeCustomerName(record.customerName),
+    });
   }
 
-  const lookup = { activeByCanonicalName };
+  const lookup = { activeByCanonicalName, activeCustomers };
   customerLookupCache.set(arrIndex, lookup);
   return lookup;
+}
+
+function findPossibleCustomerMatch(
+  customerLookup: CustomerLookup,
+  accountName: string,
+  domain: string,
+): PossibleCustomerMatch | null {
+  const accountTokens = tokenizeCustomerName(accountName);
+  const domainRoot = canonicalizeCustomerName(getDomainRoot(domain));
+  const accountCanonical = canonicalizeCustomerName(accountName);
+
+  const candidateKeys = new Set<string>();
+  if (accountCanonical.length >= 5) candidateKeys.add(accountCanonical);
+  if (domainRoot.length >= 5) candidateKeys.add(domainRoot);
+
+  let best: { score: number; match: PossibleCustomerMatch } | null = null;
+
+  for (const candidate of customerLookup.activeCustomers) {
+    const arrCanonical = candidate.canonicalName;
+    const arrTokens = candidate.tokens;
+
+    let score = 0;
+    let reason = '';
+
+    for (const key of candidateKeys) {
+      if (key === arrCanonical) continue;
+
+      if (key.length >= 6 && arrCanonical.length >= 6 && (key.includes(arrCanonical) || arrCanonical.includes(key))) {
+        const shorter = Math.min(key.length, arrCanonical.length);
+        if (shorter >= 6) {
+          const localScore = shorter >= 9 ? 0.9 : 0.84;
+          if (localScore > score) {
+            score = localScore;
+            reason = 'strong canonical name containment';
+          }
+        }
+      }
+
+      const similarity = normalizedSimilarity(key, arrCanonical);
+      if (similarity >= 0.86 && similarity > score) {
+        score = similarity;
+        reason = 'high canonical name similarity';
+      }
+    }
+
+    if (accountTokens.length >= 2 && arrTokens.length >= 2) {
+      const overlap = accountTokens.filter((token) => arrTokens.includes(token));
+      const overlapRatio = overlap.length / Math.min(accountTokens.length, arrTokens.length);
+      if (overlapRatio >= 1 && overlap.length >= 2) {
+        const localScore = 0.88;
+        if (localScore > score) {
+          score = localScore;
+          reason = 'full token overlap on multi-word company name';
+        }
+      } else if (overlapRatio >= 0.67 && overlap.length >= 2) {
+        const localScore = 0.8;
+        if (localScore > score) {
+          score = localScore;
+          reason = 'partial token overlap on company name';
+        }
+      }
+    }
+
+    if (score < 0.8) continue;
+    const confidence: 'medium' | 'low' = score >= 0.86 ? 'medium' : 'low';
+    const match = {
+      record: candidate.record,
+      confidence,
+      reason,
+    };
+
+    if (!best || score > best.score) {
+      best = { score, match };
+    }
+  }
+
+  return best?.match ?? null;
 }
 
 export function matchDomain(
@@ -128,6 +268,10 @@ export function matchDomain(
           ? 'domain_root'
           : '';
   const isActiveCustomer = Boolean(arrMatch?.isActiveCustomer);
+  const possibleCustomerMatch =
+    hasArr && !isActiveCustomer && customerLookup
+      ? findPossibleCustomerMatch(customerLookup, accountName, domain)
+      : null;
 
   // Treat active/past_due customers as "do not outreach" by default.
   const effectiveOptOut = Boolean(optOutMatch?.optOut) || isActiveCustomer;
@@ -157,9 +301,14 @@ export function matchDomain(
     sfOptOutNotes: combinedNotes,
     isActiveCustomer: hasArr ? (isActiveCustomer ? 'TRUE' : 'FALSE') : '',
     customerMatchMethod,
+    possibleCustomer: hasArr ? (possibleCustomerMatch ? 'TRUE' : 'FALSE') : '',
+    possibleCustomerConfidence: possibleCustomerMatch?.confidence ?? '',
+    possibleCustomerReason: possibleCustomerMatch
+      ? `${possibleCustomerMatch.reason}: ${possibleCustomerMatch.record.customerName}`
+      : '',
     customerTier: arrMatch?.customerTier ?? '',
-    stripeSubscriptionStatus: arrMatch?.subscriptionStatus ?? '',
-    arrCustomerName: arrMatch?.customerName ?? '',
+    stripeSubscriptionStatus: arrMatch?.subscriptionStatus ?? possibleCustomerMatch?.record.subscriptionStatus ?? '',
+    arrCustomerName: arrMatch?.customerName ?? possibleCustomerMatch?.record.customerName ?? '',
     matchMethod: 'exact',
     matchConfidence: 'high',
     sfMatchedDomain: domain,

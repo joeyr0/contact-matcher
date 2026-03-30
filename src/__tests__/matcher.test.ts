@@ -268,3 +268,34 @@ describe('matchDomain — active customer fallback by domain root', () => {
     expect(result.sfOptOut).toBe('TRUE');
   });
 });
+
+describe('matchDomain — possible customer review quarantine', () => {
+  it('flags likely customers for review without hard blocking when the name is only a near match', () => {
+    const sheet15WithStripe: Sheet15Index = {
+      'native.xyz': {
+        accountId: 'ACC779',
+        accountName: 'Native',
+        accountOwner: 'Owner',
+        stripeCustomerId: '',
+      },
+    };
+
+    const arr: CommittedArrIndex = {
+      'cus_native_markets': {
+        customerId: 'cus_native_markets',
+        customerName: 'Native Markets Inc',
+        accountOwner: 'Owner',
+        subscriptionStatus: 'active',
+        isActiveCustomer: true,
+        customerTier: 'Enterprise',
+      },
+    };
+
+    const result = matchDomain('native.xyz', sheet15WithStripe, optOut, arr);
+    expect(result.isActiveCustomer).toBe('FALSE');
+    expect(result.possibleCustomer).toBe('TRUE');
+    expect(result.possibleCustomerConfidence).toBe('low');
+    expect(result.possibleCustomerReason).toContain('Native Markets Inc');
+    expect(result.sfOptOut).toBe('FALSE');
+  });
+});

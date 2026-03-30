@@ -69,6 +69,9 @@ export interface MatchResult {
   sfOptOutNotes: string;
   isActiveCustomer: string; // 'TRUE' | 'FALSE' | ''
   customerMatchMethod: '' | 'stripe_id' | 'account_name' | 'domain_root';
+  possibleCustomer: string; // 'TRUE' | 'FALSE' | ''
+  possibleCustomerConfidence: '' | 'medium' | 'low';
+  possibleCustomerReason: string;
   customerTier: 'Enterprise' | 'Pro' | '';
   stripeSubscriptionStatus: string;
   arrCustomerName: string;
