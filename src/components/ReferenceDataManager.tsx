@@ -222,7 +222,7 @@ export default function ReferenceDataManager() {
         </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         <UploadZone
           label="Salesforce Accounts (Website → Account)"
           description="salesforce_all_accounts.csv — includes Stripe ID"
