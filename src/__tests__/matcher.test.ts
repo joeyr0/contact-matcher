@@ -199,3 +199,72 @@ describe('matchDomain — Stripe ID join to Committed ARR', () => {
     expect(result.sfOptOutNotes).toContain('Active customer');
   });
 });
+
+describe('matchDomain — active customer fallback by canonical account name', () => {
+  it('flags active customer when Stripe IDs differ but account name clearly matches ARR', () => {
+    const sheet15WithStripe: Sheet15Index = {
+      'infinex.xyz': {
+        accountId: 'ACC777',
+        accountName: 'Infinex',
+        accountOwner: 'Owner',
+        stripeCustomerId: 'cus_salesforce_mismatch',
+      },
+    };
+
+    const arr: CommittedArrIndex = {
+      'cus_prod': {
+        customerId: 'cus_prod',
+        customerName: 'Infinex (Prod)',
+        accountOwner: 'Owner',
+        subscriptionStatus: 'active',
+        isActiveCustomer: true,
+        customerTier: 'Enterprise',
+      },
+      'cus_dev': {
+        customerId: 'cus_dev',
+        customerName: 'Infinex (Dev)',
+        accountOwner: 'Owner',
+        subscriptionStatus: 'canceled',
+        isActiveCustomer: false,
+        customerTier: 'Pro',
+      },
+    };
+
+    const result = matchDomain('infinex.xyz', sheet15WithStripe, optOut, arr);
+    expect(result.isActiveCustomer).toBe('TRUE');
+    expect(result.customerMatchMethod).toBe('account_name');
+    expect(result.customerTier).toBe('Enterprise');
+    expect(result.arrCustomerName).toBe('Infinex (Prod)');
+    expect(result.sfOptOut).toBe('TRUE');
+  });
+});
+
+describe('matchDomain — active customer fallback by domain root', () => {
+  it('flags active customer when Salesforce account name is noisy but matched domain root is exact', () => {
+    const sheet15WithStripe: Sheet15Index = {
+      'infinex.xyz': {
+        accountId: 'ACC778',
+        accountName: 'Infinex Foundation Main',
+        accountOwner: 'Owner',
+        stripeCustomerId: '',
+      },
+    };
+
+    const arr: CommittedArrIndex = {
+      'cus_prod': {
+        customerId: 'cus_prod',
+        customerName: 'Infinex (Prod)',
+        accountOwner: 'Owner',
+        subscriptionStatus: 'active',
+        isActiveCustomer: true,
+        customerTier: 'Enterprise',
+      },
+    };
+
+    const result = matchDomain('infinex.xyz', sheet15WithStripe, optOut, arr);
+    expect(result.isActiveCustomer).toBe('TRUE');
+    expect(result.customerMatchMethod).toBe('domain_root');
+    expect(result.arrCustomerName).toBe('Infinex (Prod)');
+    expect(result.sfOptOut).toBe('TRUE');
+  });
+});

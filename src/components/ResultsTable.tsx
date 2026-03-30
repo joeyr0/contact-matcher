@@ -30,6 +30,7 @@ const ENRICHED_HEADERS = [
   'sf_opt_out_specific_contacts',
   'sf_opt_out_notes',
   'is_active_customer',
+  'customer_match_method',
   'customer_tier',
   'stripe_subscription_status',
   'arr_customer_name',
@@ -72,6 +73,7 @@ function toFlatRows(headers: string[], results: EnrichedRow[]): FlatRow[] {
     row['sf_opt_out_specific_contacts'] = match.sfOptOutSpecificContacts;
     row['sf_opt_out_notes'] = match.sfOptOutNotes;
     row['is_active_customer'] = match.isActiveCustomer;
+    row['customer_match_method'] = match.customerMatchMethod;
     row['customer_tier'] = match.customerTier;
     row['stripe_subscription_status'] = match.stripeSubscriptionStatus;
     row['arr_customer_name'] = match.arrCustomerName;
@@ -127,6 +129,7 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
     tk_customer_id: false,
     sf_opt_out_specific_contacts: false,
     sf_opt_out_notes: false,
+    customer_match_method: false,
     stripe_subscription_status: false,
     arr_customer_name: false,
   });
@@ -273,6 +276,11 @@ export default function ResultsTable({ headers, results, onReset }: ResultsTable
           if (v === 'FALSE') return <span className="text-xs text-gray-400">FALSE</span>;
           return null;
         },
+      },
+      {
+        id: 'customer_match_method',
+        header: 'customer_match_method',
+        accessorFn: (row) => row['customer_match_method'] ?? '',
       },
       {
         id: 'customer_tier',

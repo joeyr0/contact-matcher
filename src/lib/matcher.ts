@@ -18,6 +18,7 @@ const NO_MATCH: MatchResult = {
   sfOptOutSpecificContacts: '',
   sfOptOutNotes: '',
   isActiveCustomer: '',
+  customerMatchMethod: '',
   customerTier: '',
   stripeSubscriptionStatus: '',
   arrCustomerName: '',
@@ -25,6 +26,57 @@ const NO_MATCH: MatchResult = {
   matchConfidence: '',
   sfMatchedDomain: '',
 };
+
+interface CustomerLookup {
+  activeByCanonicalName: Map<string, CommittedArrIndex[string]>;
+}
+
+const customerLookupCache = new WeakMap<CommittedArrIndex, CustomerLookup>();
+
+function canonicalizeCustomerName(name: string): string {
+  return normalizeAccountName(
+    name
+      .replace(/\((prod|production|dev|development|staging|stage|testing|test|sandbox)\)/gi, ' ')
+      .replace(/\b(prod|production|dev|development|staging|stage|testing|test|sandbox)\b/gi, ' '),
+  );
+}
+
+function getDomainRoot(domain: string): string {
+  const dot = domain.lastIndexOf('.');
+  const root = dot !== -1 ? domain.slice(0, dot) : domain;
+  const innerDot = root.lastIndexOf('.');
+  return innerDot !== -1 ? root.slice(innerDot + 1) : root;
+}
+
+function choosePreferredCustomer(
+  current: CommittedArrIndex[string] | undefined,
+  next: CommittedArrIndex[string],
+): CommittedArrIndex[string] {
+  if (!current) return next;
+  if (current.subscriptionStatus !== 'active' && next.subscriptionStatus === 'active') return next;
+  if (current.customerTier !== 'Enterprise' && next.customerTier === 'Enterprise') return next;
+  return current;
+}
+
+function getCustomerLookup(arrIndex: CommittedArrIndex): CustomerLookup {
+  const cached = customerLookupCache.get(arrIndex);
+  if (cached) return cached;
+
+  const activeByCanonicalName = new Map<string, CommittedArrIndex[string]>();
+  for (const record of Object.values(arrIndex)) {
+    if (!record.isActiveCustomer) continue;
+    const canonical = canonicalizeCustomerName(record.customerName);
+    if (!canonical || canonical.length < 5) continue;
+    activeByCanonicalName.set(
+      canonical,
+      choosePreferredCustomer(activeByCanonicalName.get(canonical), record),
+    );
+  }
+
+  const lookup = { activeByCanonicalName };
+  customerLookupCache.set(arrIndex, lookup);
+  return lookup;
+}
 
 export function matchDomain(
   domain: string,
@@ -50,14 +102,44 @@ export function matchDomain(
   const stripeCustomerId = (sheet15Match?.stripeCustomerId ?? '').trim();
   const tkCustomerId = (sheet15Match?.tkCustomerId ?? '').trim();
 
-  const arrMatch = arrIndex && stripeCustomerId ? arrIndex[stripeCustomerId] : null;
+  const directArrMatch = arrIndex && stripeCustomerId ? arrIndex[stripeCustomerId] : null;
   const hasArr = Boolean(arrIndex);
+  const customerLookup = arrIndex ? getCustomerLookup(arrIndex) : null;
+  const canonicalAccountName = canonicalizeCustomerName(accountName);
+  const canonicalDomainRoot = canonicalizeCustomerName(getDomainRoot(domain));
+
+  const inferredByName =
+    !directArrMatch?.isActiveCustomer && customerLookup && canonicalAccountName.length >= 5
+      ? customerLookup.activeByCanonicalName.get(canonicalAccountName) ?? null
+      : null;
+
+  const inferredByDomain =
+    !directArrMatch?.isActiveCustomer && !inferredByName && customerLookup && canonicalDomainRoot.length >= 5
+      ? customerLookup.activeByCanonicalName.get(canonicalDomainRoot) ?? null
+      : null;
+
+  const arrMatch = directArrMatch?.isActiveCustomer ? directArrMatch : inferredByName ?? inferredByDomain ?? directArrMatch ?? null;
+  const customerMatchMethod: MatchResult['customerMatchMethod'] =
+    directArrMatch?.isActiveCustomer
+      ? 'stripe_id'
+      : inferredByName
+        ? 'account_name'
+        : inferredByDomain
+          ? 'domain_root'
+          : '';
   const isActiveCustomer = Boolean(arrMatch?.isActiveCustomer);
 
   // Treat active/past_due customers as "do not outreach" by default.
   const effectiveOptOut = Boolean(optOutMatch?.optOut) || isActiveCustomer;
   const optOutNotesBase = optOutMatch?.notes ?? '';
-  const autoNote = isActiveCustomer ? 'Active customer (Committed ARR)' : '';
+  const autoNote =
+    customerMatchMethod === 'stripe_id'
+      ? 'Active customer (Committed ARR via Stripe ID)'
+      : customerMatchMethod === 'account_name'
+        ? 'Active customer (Committed ARR via account name)'
+        : customerMatchMethod === 'domain_root'
+          ? 'Active customer (Committed ARR via domain root)'
+          : '';
   const combinedNotes = [optOutNotesBase, autoNote].filter(Boolean).join(' · ');
 
   return {
@@ -74,6 +156,7 @@ export function matchDomain(
       : '',
     sfOptOutNotes: combinedNotes,
     isActiveCustomer: hasArr ? (isActiveCustomer ? 'TRUE' : 'FALSE') : '',
+    customerMatchMethod,
     customerTier: arrMatch?.customerTier ?? '',
     stripeSubscriptionStatus: arrMatch?.subscriptionStatus ?? '',
     arrCustomerName: arrMatch?.customerName ?? '',
