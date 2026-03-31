@@ -104,10 +104,14 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-8">
-        {tab === 'reference' && <ReferenceDataManager />}
-        {tab === 'prompts' && <PromptManager />}
+        <div className={tab === 'reference' ? 'block' : 'hidden'} aria-hidden={tab !== 'reference'}>
+          <ReferenceDataManager />
+        </div>
+        <div className={tab === 'prompts' ? 'block' : 'hidden'} aria-hidden={tab !== 'prompts'}>
+          <PromptManager />
+        </div>
 
-        {tab === 'match' && (
+        <div className={tab === 'match' ? 'block' : 'hidden'} aria-hidden={tab !== 'match'}>
           <div className="space-y-6">
             {refStatus && (!refStatus.sheet15.loaded || !refStatus.optout.loaded) && (
               <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
@@ -155,7 +159,7 @@ export default function App() {
               </>
             )}
           </div>
-        )}
+        </div>
       </main>
     </div>
   );

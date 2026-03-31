@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import { getActiveProvider, getResolvedApiKey, type ApiProvider } from './apiKeyConfig';
+import { getActiveProvider, getActiveProviderAsync, getResolvedApiKey, getResolvedApiKeyAsync, type ApiProvider } from './apiKeyConfig';
 
 const OPENAI_MODEL = process.env.OPENAI_SCORING_MODEL || 'gpt-5-mini';
 const OPENAI_OUTBOUND_MODEL = process.env.OPENAI_OUTBOUND_MODEL || process.env.OPENAI_SCORING_MODEL || 'gpt-5-mini';
@@ -31,9 +31,18 @@ export function getConfiguredKey(provider = getConfiguredProvider()): string {
   return getResolvedApiKey(provider);
 }
 
+export async function getConfiguredProviderAsync(): Promise<ApiProvider> {
+  return getActiveProviderAsync();
+}
+
+export async function getConfiguredKeyAsync(provider?: ApiProvider): Promise<string> {
+  const resolvedProvider = provider ?? (await getConfiguredProviderAsync());
+  return getResolvedApiKeyAsync(resolvedProvider);
+}
+
 export async function callStructuredJson<T>(systemPrompt: string, userPayload: unknown, mode: 'scoring' | 'outbound'): Promise<T> {
-  const provider = getConfiguredProvider();
-  const apiKey = getConfiguredKey(provider);
+  const provider = await getConfiguredProviderAsync();
+  const apiKey = await getConfiguredKeyAsync(provider);
   if (!apiKey) {
     throw new Error(`${provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY'} not configured`);
   }
@@ -69,8 +78,8 @@ export async function callStructuredJson<T>(systemPrompt: string, userPayload: u
 }
 
 export async function callTextCompletion(systemPrompt: string, userText: string): Promise<string> {
-  const provider = getConfiguredProvider();
-  const apiKey = getConfiguredKey(provider);
+  const provider = await getConfiguredProviderAsync();
+  const apiKey = await getConfiguredKeyAsync(provider);
   if (!apiKey) {
     throw new Error(`${provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY'} not configured`);
   }

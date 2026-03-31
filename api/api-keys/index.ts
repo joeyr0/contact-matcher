@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
-  getApiKeyStatuses,
-  resetApiKeyValue,
-  updateApiProvider,
-  updateApiKeyValue,
+  getApiKeyStatusesAsync,
+  resetApiKeyValueAsync,
+  updateApiProviderAsync,
+  updateApiKeyValueAsync,
 } from '../../../src/lib/apiKeyConfig.js';
 type Provider = 'openai' | 'anthropic';
 
@@ -11,10 +11,10 @@ function isProvider(value: unknown): value is Provider {
   return value === 'openai' || value === 'anthropic';
 }
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === 'GET') {
-      return res.status(200).json({ keys: getApiKeyStatuses() });
+      return res.status(200).json({ keys: await getApiKeyStatusesAsync() });
     }
 
     if (req.method === 'PUT') {
@@ -22,16 +22,16 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
       if (!isProvider(provider) || (mode !== 'default' && mode !== 'override')) {
         return res.status(400).json({ error: 'provider and mode are required' });
       }
-      updateApiProvider(provider);
+      await updateApiProviderAsync(provider);
       if (mode === 'override') {
         if (typeof value !== 'string' || !value.trim()) {
           return res.status(400).json({ error: 'non-empty value is required for override mode' });
         }
-        updateApiKeyValue(provider, value.trim());
+        await updateApiKeyValueAsync(provider, value.trim());
       } else {
-        resetApiKeyValue(provider);
+        await resetApiKeyValueAsync(provider);
       }
-      return res.status(200).json({ keys: getApiKeyStatuses() });
+      return res.status(200).json({ keys: await getApiKeyStatusesAsync() });
     }
 
     if (req.method === 'POST') {
@@ -39,8 +39,8 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
       if (!isProvider(provider) || action !== 'reset') {
         return res.status(400).json({ error: 'provider and action=reset are required' });
       }
-      resetApiKeyValue(provider);
-      return res.status(200).json({ keys: getApiKeyStatuses() });
+      await resetApiKeyValueAsync(provider);
+      return res.status(200).json({ keys: await getApiKeyStatusesAsync() });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

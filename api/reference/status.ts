@@ -8,7 +8,7 @@ const defaultStatus: ReferenceStatus = {
   arr:     { loaded: false, rowCount: 0, uniqueCustomers: 0, lastUpdated: null },
 };
 
-export default function handler(_req: VercelRequest, res: VercelResponse) {
-  const status = readDataJSON<ReferenceStatus>('metadata.json') ?? defaultStatus;
+export default async function handler(_req: VercelRequest, res: VercelResponse) {
+  const status = (await readDataJSON<ReferenceStatus>('metadata.json')) ?? defaultStatus;
   res.status(200).json(status);
 }

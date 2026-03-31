@@ -51,9 +51,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const blobKey = type === 'sheet15' ? 'sheet15-index.json' : type === 'optout' ? 'optout-index.json' : 'committed-arr-index.json';
-    writeDataJSON(blobKey, parseResult.index);
+    await writeDataJSON(blobKey, parseResult.index);
 
-    const meta = readDataJSON<ReferenceStatus>('metadata.json') ?? {
+    const meta = (await readDataJSON<ReferenceStatus>('metadata.json')) ?? {
       sheet15: { loaded: false, rowCount: 0, uniqueDomains: 0, lastUpdated: null },
       optout:  { loaded: false, rowCount: 0, uniqueDomains: 0, lastUpdated: null },
       arr:     { loaded: false, rowCount: 0, uniqueCustomers: 0, lastUpdated: null },
@@ -73,7 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         lastUpdated: new Date().toISOString(),
       };
     }
-    writeDataJSON('metadata.json', meta);
+    await writeDataJSON('metadata.json', meta);
 
     return res.status(200).json({
       success: true,

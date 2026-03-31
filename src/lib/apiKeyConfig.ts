@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { ApiKeyConfig, ApiKeyStatusEntry } from './types';
+import { readDataJSON, writeDataJSON } from '../../api/lib/readData.js';
 
 export type ApiProvider = 'openai' | 'anthropic';
 
@@ -53,9 +54,31 @@ export function readApiKeyConfig(): ApiKeyConfig {
   }
 }
 
+export async function readApiKeyConfigAsync(): Promise<ApiKeyConfig> {
+  const defaults = getDefaultApiKeyConfig();
+  const parsed = await readDataJSON<Partial<ApiKeyConfig>>('api-keys.json');
+  if (!parsed) return defaults;
+  return {
+    openai: {
+      value: parsed.openai?.value || '',
+      lastUpdated: parsed.openai?.lastUpdated ?? null,
+    },
+    anthropic: {
+      value: parsed.anthropic?.value || '',
+      lastUpdated: parsed.anthropic?.lastUpdated ?? null,
+    },
+    provider: parsed.provider === 'anthropic' ? 'anthropic' : 'openai',
+  };
+}
+
 function writeApiKeyConfig(config: ApiKeyConfig): ApiKeyConfig {
   fs.mkdirSync(getDataDir(), { recursive: true });
   fs.writeFileSync(getApiKeysPath(), JSON.stringify(config), 'utf-8');
+  return config;
+}
+
+async function writeApiKeyConfigAsync(config: ApiKeyConfig): Promise<ApiKeyConfig> {
+  await writeDataJSON('api-keys.json', config);
   return config;
 }
 
@@ -68,6 +91,15 @@ export function updateApiKeyValue(provider: ApiProvider, value: string): ApiKeyC
   return writeApiKeyConfig(current);
 }
 
+export async function updateApiKeyValueAsync(provider: ApiProvider, value: string): Promise<ApiKeyConfig> {
+  const current = await readApiKeyConfigAsync();
+  current[provider] = {
+    value,
+    lastUpdated: new Date().toISOString(),
+  };
+  return writeApiKeyConfigAsync(current);
+}
+
 export function resetApiKeyValue(provider: ApiProvider): ApiKeyConfig {
   const current = readApiKeyConfig();
   current[provider] = {
@@ -77,14 +109,33 @@ export function resetApiKeyValue(provider: ApiProvider): ApiKeyConfig {
   return writeApiKeyConfig(current);
 }
 
+export async function resetApiKeyValueAsync(provider: ApiProvider): Promise<ApiKeyConfig> {
+  const current = await readApiKeyConfigAsync();
+  current[provider] = {
+    value: '',
+    lastUpdated: new Date().toISOString(),
+  };
+  return writeApiKeyConfigAsync(current);
+}
+
 export function updateApiProvider(provider: ApiProvider): ApiKeyConfig {
   const current = readApiKeyConfig();
   current.provider = provider;
   return writeApiKeyConfig(current);
 }
 
+export async function updateApiProviderAsync(provider: ApiProvider): Promise<ApiKeyConfig> {
+  const current = await readApiKeyConfigAsync();
+  current.provider = provider;
+  return writeApiKeyConfigAsync(current);
+}
+
 export function getActiveProvider(): ApiProvider {
   return readApiKeyConfig().provider === 'anthropic' ? 'anthropic' : 'openai';
+}
+
+export async function getActiveProviderAsync(): Promise<ApiProvider> {
+  return (await readApiKeyConfigAsync()).provider === 'anthropic' ? 'anthropic' : 'openai';
 }
 
 export function getResolvedApiKey(provider: ApiProvider): string {
@@ -93,8 +144,35 @@ export function getResolvedApiKey(provider: ApiProvider): string {
   return getEnvKey(provider).trim();
 }
 
+export async function getResolvedApiKeyAsync(provider: ApiProvider): Promise<string> {
+  const saved = (await readApiKeyConfigAsync())[provider].value.trim();
+  if (saved) return saved;
+  return getEnvKey(provider).trim();
+}
+
 export function getApiKeyStatuses(): ApiKeyStatusEntry[] {
   const config = readApiKeyConfig();
+  return ([
+    ['openai', 'OpenAI'],
+    ['anthropic', 'Claude / Anthropic'],
+  ] as const).map(([provider, label]) => {
+    const savedValue = config[provider].value.trim();
+    const envValue = getEnvKey(provider).trim();
+    const source = savedValue ? 'saved' : envValue ? 'environment' : 'missing';
+    const activeValue = savedValue || envValue;
+    return {
+      provider,
+      label,
+      active: config.provider === provider,
+      source,
+      maskedValue: maskKey(activeValue),
+      lastUpdated: config[provider].lastUpdated,
+    };
+  });
+}
+
+export async function getApiKeyStatusesAsync(): Promise<ApiKeyStatusEntry[]> {
+  const config = await readApiKeyConfigAsync();
   return ([
     ['openai', 'OpenAI'],
     ['anthropic', 'Claude / Anthropic'],

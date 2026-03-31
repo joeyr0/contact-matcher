@@ -1,12 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDefaultPromptConfig, readPromptConfig, resetPromptValue, updatePromptValue } from '../../src/lib/promptConfig.js';
 import type { PromptConfig } from '../../src/lib/types.js';
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
+    const { getDefaultPromptConfig, readPromptConfigAsync, resetPromptValueAsync, updatePromptValueAsync } = await import(
+      '../../src/lib/promptConfig.js'
+    );
+
     if (req.method === 'GET') {
       return res.status(200).json({
-        prompts: readPromptConfig(),
+        prompts: await readPromptConfigAsync(),
         defaults: getDefaultPromptConfig(),
       });
     }
@@ -16,7 +19,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
       if ((key !== 'icpScoring' && key !== 'contactScoring' && key !== 'outbound') || typeof value !== 'string') {
         return res.status(400).json({ error: 'key and value are required' });
       }
-      return res.status(200).json({ prompts: updatePromptValue(key, value) });
+      return res.status(200).json({ prompts: await updatePromptValueAsync(key, value) });
     }
 
     if (req.method === 'POST') {
@@ -24,7 +27,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
       if ((key !== 'icpScoring' && key !== 'contactScoring' && key !== 'outbound') || action !== 'reset') {
         return res.status(400).json({ error: 'key and action=reset are required' });
       }
-      return res.status(200).json({ prompts: resetPromptValue(key) });
+      return res.status(200).json({ prompts: await resetPromptValueAsync(key) });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

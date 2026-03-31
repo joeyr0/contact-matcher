@@ -37,9 +37,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (columnMode === 'email') parsed.isDomainColumn = false;
   if (columnMode === 'website') parsed.isDomainColumn = true;
 
-  const sheet15Index = readDataJSON<Sheet15Index>('sheet15-index.json');
-  const optOutIndex = readDataJSON<OptOutIndex>('optout-index.json');
-  const arrIndex = readDataJSON<CommittedArrIndex>('committed-arr-index.json');
+  const sheet15Index = await readDataJSON<Sheet15Index>('sheet15-index.json');
+  const optOutIndex = await readDataJSON<OptOutIndex>('optout-index.json');
+  const arrIndex = await readDataJSON<CommittedArrIndex>('committed-arr-index.json');
   if (!sheet15Index || !optOutIndex) {
     return res.status(503).json({ error: 'Reference data not available. Contact your admin.' });
   }
