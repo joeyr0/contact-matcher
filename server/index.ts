@@ -8,7 +8,7 @@ import { buildSheet15Index, buildOptOutIndex, buildCommittedArrIndex } from '../
 import { parseContactCSV } from '../src/lib/csv.js';
 import { normalizeDomain } from '../src/lib/normalize.js';
 import { extractDomain, matchDomain, getCustomerLookup, findPossibleCustomerMatch } from '../src/lib/matcher.js';
-import { hydrateScoreRows, scoreEnrichedRows } from '../src/lib/icpServer.js';
+import { advanceIcpJobState, createIcpJobState, hydrateScoreRows, scoreEnrichedRows } from '../src/lib/icpServer.js';
 import { generateOutboundDrafts } from '../src/lib/outboundServer.js';
 import { getDefaultPromptConfig, readPromptConfig, resetPromptValue, updatePromptValue } from '../src/lib/promptConfig.js';
 import { getApiKeyStatuses, resetApiKeyValue, updateApiKeyValue, updateApiProvider } from '../src/lib/apiKeyConfig.js';
@@ -18,7 +18,7 @@ import { checkRedirects } from '../src/lib/redirect.js';
 import { matchByCompanyName } from '../src/lib/matcher.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
 import { matchByName, buildAccountNameIndex } from '../src/lib/matcher.js';
-import type { Sheet15Index, OptOutIndex, CommittedArrIndex, EnrichedRow, FuzzyBatchResult, ReferenceStatus } from '../src/lib/types.js';
+import type { Sheet15Index, OptOutIndex, CommittedArrIndex, EnrichedRow, FuzzyBatchResult, IcpJobState, ReferenceStatus } from '../src/lib/types.js';
 import type { OutboundCandidate } from '../src/lib/types.js';
 
 const app = express();
@@ -45,6 +45,20 @@ function readJSON<T>(name: string): T | null {
 
 function writeJSON(name: string, data: unknown) {
   fs.writeFileSync(dataPath(name), JSON.stringify(data), 'utf-8');
+}
+
+function icpJobPath(id: string) {
+  return dataPath(`icp-job-${id}.json`);
+}
+
+function readIcpJob(id: string): IcpJobState | null {
+  const p = icpJobPath(id);
+  if (!fs.existsSync(p)) return null;
+  return JSON.parse(fs.readFileSync(p, 'utf-8')) as IcpJobState;
+}
+
+function writeIcpJob(job: IcpJobState) {
+  fs.writeFileSync(icpJobPath(job.id), JSON.stringify(job), 'utf-8');
 }
 
 // ---------------------------------------------------------------------------
@@ -407,6 +421,66 @@ app.post('/api/icp-score/stream', async (req, res) => {
     send({ type: 'error', error: error instanceof Error ? error.message : String(error) });
     res.end();
   }
+});
+
+app.post('/api/icp-jobs', (req, res) => {
+  const { headers, results } = req.body as { headers?: unknown; results?: unknown };
+  if (!Array.isArray(headers) || !Array.isArray(results)) {
+    res.status(400).json({ error: 'headers and results are required arrays' });
+    return;
+  }
+
+  const id = crypto.randomUUID();
+  const job = createIcpJobState(headers as string[], hydrateScoreRows(results as any[]), id);
+  writeIcpJob(job);
+  res.json({
+    job: {
+      id: job.id,
+      status: job.status,
+      progress: job.progress,
+      error: job.error,
+      updatedAt: job.updatedAt,
+      results: job.status === 'complete' ? job.rows : undefined,
+    },
+  });
+});
+
+app.get('/api/icp-jobs/:id', (req, res) => {
+  const job = readIcpJob(req.params.id);
+  if (!job) {
+    res.status(404).json({ error: 'Job not found' });
+    return;
+  }
+  res.json({
+    job: {
+      id: job.id,
+      status: job.status,
+      progress: job.progress,
+      error: job.error,
+      updatedAt: job.updatedAt,
+      results: job.status === 'complete' ? job.rows : undefined,
+    },
+  });
+});
+
+app.post('/api/icp-jobs/:id', async (req, res) => {
+  const job = readIcpJob(req.params.id);
+  if (!job) {
+    res.status(404).json({ error: 'Job not found' });
+    return;
+  }
+  const nextJob = await advanceIcpJobState(job);
+  writeIcpJob(nextJob);
+  res.json({
+    job: {
+      id: nextJob.id,
+      status: nextJob.status,
+      progress: nextJob.progress,
+      error: nextJob.error,
+      updatedAt: nextJob.updatedAt,
+      results: nextJob.status === 'complete' ? nextJob.rows : undefined,
+    },
+  });
 });
 
 // ---------------------------------------------------------------------------

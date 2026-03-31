@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import type { CompactScoreRow, EnrichedRow, IcpScoreStreamEvent, OutboundDraft, OutboundStreamEvent } from '../lib/types';
+import { useEffect, useMemo, useState } from 'react';
+import type { CompactScoreRow, EnrichedRow, IcpJobResponse, OutboundDraft, OutboundStreamEvent } from '../lib/types';
 import { buildScoreableCompanies, classifyAccountRoute, extractContactFields } from '../lib/icp';
 import { buildOutboundCandidates, type OutboundScope } from '../lib/outbound';
 
@@ -15,11 +15,12 @@ type OutboundState = 'idle' | 'running' | 'complete' | 'error';
 type RunMode = 'score_only' | 'score_sample' | 'score_and_outbound_direct' | 'score_and_outbound_queue';
 const SCORE_HEADERS = ['Full Name', 'Title', 'Email'];
 const SAMPLE_LIMIT = 5;
+const ACTIVE_JOB_STORAGE_KEY = 'contact-matcher:active-icp-job';
 
 export default function IcpScorer({ headers, results, onComplete, onError }: IcpScorerProps) {
   const [state, setState] = useState<ScoringState>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [progress, setProgress] = useState({ stage: 'companies' as 'companies' | 'contacts', processed: 0, total: 0 });
+  const [progress, setProgress] = useState({ stage: 'companies' as 'companies' | 'contacts' | 'complete', processed: 0, total: 0 });
   const [showRunMenu, setShowRunMenu] = useState(false);
   const [showOutboundMenu, setShowOutboundMenu] = useState(false);
   const [outboundState, setOutboundState] = useState<OutboundState>('idle');
@@ -28,6 +29,9 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
   const [outboundScope, setOutboundScope] = useState<OutboundScope>('direct');
   const [drafts, setDrafts] = useState<OutboundDraft[]>([]);
   const [lastRunWasSample, setLastRunWasSample] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [lastRunMode, setLastRunMode] = useState<RunMode>('score_only');
+  const [runTargetIndexes, setRunTargetIndexes] = useState<number[]>([]);
 
   const preparedResults = useMemo(
     () =>
@@ -145,28 +149,31 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
     setOutboundError(null);
     setDrafts([]);
     setLastRunWasSample(isSampleRun);
+    setLastRunMode(mode);
+    setRunTargetIndexes(targetIndexes);
 
     let response: Response;
     try {
       const compactResults: CompactScoreRow[] = targetIndexes.map((rowIndex) => {
         const row = results[rowIndex]!;
         return {
-        originalRow: (() => {
-          const contact = extractContactFields(headers, row.originalRow);
-          return [contact.name, contact.title, contact.email];
-        })(),
-        domain: row.domain,
-        companyName: row.companyName,
-        match: {
-          sfAccountName: row.match.sfAccountName,
-          sfMatchedDomain: row.match.sfMatchedDomain,
-          sfOptOut: row.match.sfOptOut,
-          sfOptOutSpecificContacts: row.match.sfOptOutSpecificContacts,
-          isCustomer: row.match.isCustomer,
-          accountStatus: row.match.accountStatus,
-        },
-      }});
-      response = await fetch('/api/icp-score/stream', {
+          originalRow: (() => {
+            const contact = extractContactFields(headers, row.originalRow);
+            return [contact.name, contact.title, contact.email];
+          })(),
+          domain: row.domain,
+          companyName: row.companyName,
+          match: {
+            sfAccountName: row.match.sfAccountName,
+            sfMatchedDomain: row.match.sfMatchedDomain,
+            sfOptOut: row.match.sfOptOut,
+            sfOptOutSpecificContacts: row.match.sfOptOutSpecificContacts,
+            isCustomer: row.match.isCustomer,
+            accountStatus: row.match.accountStatus,
+          },
+        };
+      });
+      response = await fetch('/api/icp-jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ headers: SCORE_HEADERS, results: compactResults }),
@@ -179,7 +186,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
       return;
     }
 
-    if (!response.ok || !response.body) {
+    if (!response.ok) {
       const message = `Scoring failed: HTTP ${response.status}`;
       setErrorMsg(message);
       setState('error');
@@ -187,59 +194,133 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
       return;
     }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const event = JSON.parse(line.slice(6)) as IcpScoreStreamEvent;
-          if (event.type === 'progress') {
-            setProgress({ stage: event.stage, processed: event.processed, total: event.total });
-          } else if (event.type === 'complete') {
-            const scoredIndexByOriginalIndex = new Map(targetIndexes.map((originalIndex, scoredIndex) => [originalIndex, scoredIndex]));
-            const mergedResults = results.map((row, index) => {
-              const scoredPosition = scoredIndexByOriginalIndex.get(index) ?? -1;
-              const scoredRow = scoredPosition >= 0 ? event.results[scoredPosition] : undefined;
-              if (!scoredRow) return row;
-              return {
-                ...row,
-                match: {
-                  ...row.match,
-                  ...scoredRow.match,
-                },
-              };
-            });
-            setState('complete');
-            onComplete(mergedResults);
-            if (mode === 'score_and_outbound_direct') {
-              void runOutbound('direct', mergedResults);
-            } else if (mode === 'score_and_outbound_queue') {
-              void runOutbound('direct_queue', mergedResults);
-            }
-          } else if (event.type === 'error') {
-            setErrorMsg(event.error);
-            setState('error');
-            onError(event.error);
-          }
-        }
-      }
+      const data = (await response.json()) as IcpJobResponse;
+      setJobId(data.job.id);
+      window.localStorage.setItem(
+        ACTIVE_JOB_STORAGE_KEY,
+        JSON.stringify({
+          id: data.job.id,
+          mode,
+          lastRunWasSample: isSampleRun,
+          targetIndexes,
+        }),
+      );
     } catch (error) {
-      const message = `Scoring stream failed: ${String(error)}`;
+      const message = `Scoring start failed: ${String(error)}`;
       setErrorMsg(message);
       setState('error');
       onError(message);
     }
   };
+
+  useEffect(() => {
+    if (jobId || state === 'running') return;
+    try {
+      const raw = window.localStorage.getItem(ACTIVE_JOB_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        id?: string;
+        mode?: RunMode;
+        lastRunWasSample?: boolean;
+        targetIndexes?: number[];
+      };
+      if (!saved.id || !Array.isArray(saved.targetIndexes)) return;
+      setJobId(saved.id);
+      setLastRunMode(saved.mode ?? 'score_only');
+      setLastRunWasSample(Boolean(saved.lastRunWasSample));
+      setRunTargetIndexes(saved.targetIndexes);
+      setState('running');
+      setErrorMsg(null);
+    } catch {
+      // ignore corrupt saved job state
+    }
+  }, [jobId, state]);
+
+  useEffect(() => {
+    if (!jobId || state !== 'running') return;
+
+    let cancelled = false;
+    const run = async () => {
+      while (!cancelled) {
+        let response: Response;
+        try {
+          response = await fetch(`/api/icp-jobs/${jobId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+        } catch (error) {
+          const message = `Network error: ${String(error)}`;
+          if (!cancelled) {
+            setErrorMsg(message);
+            setState('error');
+            onError(message);
+          }
+          return;
+        }
+
+        if (!response.ok) {
+          const message = `Scoring failed: HTTP ${response.status}`;
+          if (!cancelled) {
+            setErrorMsg(message);
+            setState('error');
+            onError(message);
+          }
+          return;
+        }
+
+        const data = (await response.json()) as IcpJobResponse;
+        if (cancelled) return;
+        const job = data.job;
+        setProgress(job.progress);
+
+        if (job.status === 'error') {
+          const message = job.error || 'Scoring job failed';
+          setErrorMsg(message);
+          setState('error');
+          onError(message);
+          setJobId(null);
+          window.localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY);
+          return;
+        }
+
+        if (job.status === 'complete' && job.results) {
+          const targetIndexes = runTargetIndexes.length > 0 ? runTargetIndexes : lastRunWasSample ? eligibleRowIndexes.slice(0, SAMPLE_LIMIT) : results.map((_, index) => index);
+          const scoredIndexByOriginalIndex = new Map(targetIndexes.map((originalIndex, scoredIndex) => [originalIndex, scoredIndex]));
+          const mergedResults = results.map((row, index) => {
+            const scoredPosition = scoredIndexByOriginalIndex.get(index) ?? -1;
+            const scoredRow = scoredPosition >= 0 ? job.results?.[scoredPosition] : undefined;
+            if (!scoredRow) return row;
+            return {
+              ...row,
+              match: {
+                ...row.match,
+                ...scoredRow.match,
+              },
+            };
+          });
+          setState('complete');
+          setJobId(null);
+          setRunTargetIndexes([]);
+          window.localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY);
+          onComplete(mergedResults);
+          if (lastRunMode === 'score_and_outbound_direct') {
+            void runOutbound('direct', mergedResults);
+          } else if (lastRunMode === 'score_and_outbound_queue') {
+            void runOutbound('direct_queue', mergedResults);
+          }
+          return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [eligibleRowIndexes, jobId, lastRunMode, lastRunWasSample, onComplete, onError, results, runTargetIndexes, state]);
 
   if (results.length === 0) return null;
 

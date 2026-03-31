@@ -10,6 +10,7 @@ import type { EnrichedRow, MatchResult, ReferenceStatus } from './lib/types';
 
 type Tab = 'reference' | 'prompts' | 'match';
 type MatchState = 'idle' | 'matching' | 'complete';
+const SESSION_STORAGE_KEY = 'contact-matcher:session';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('match');
@@ -19,6 +20,25 @@ export default function App() {
   const [results, setResults] = useState<EnrichedRow[]>([]);
   const [resultHeaders, setResultHeaders] = useState<string[]>([]);
   const [matchError, setMatchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        matchState?: MatchState;
+        results?: EnrichedRow[];
+        resultHeaders?: string[];
+      };
+      if (saved.matchState === 'complete' && Array.isArray(saved.results) && Array.isArray(saved.resultHeaders)) {
+        setMatchState('complete');
+        setResults(saved.results);
+        setResultHeaders(saved.resultHeaders);
+      }
+    } catch {
+      // ignore corrupt saved sessions
+    }
+  }, []);
 
   useEffect(() => {
     fetch('/api/reference/status')
@@ -58,6 +78,7 @@ export default function App() {
     setResultHeaders([]);
     setMatchError(null);
     setProgress({ processed: 0, total: 0 });
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
   };
 
   const handleFuzzyUpdates = useCallback((domainToMatch: Map<string, MatchResult>) => {
@@ -68,6 +89,18 @@ export default function App() {
       }),
     );
   }, []);
+
+  useEffect(() => {
+    if (matchState !== 'complete' || results.length === 0 || resultHeaders.length === 0) return;
+    window.localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({
+        matchState,
+        results,
+        resultHeaders,
+      }),
+    );
+  }, [matchState, resultHeaders, results]);
 
   return (
     <div className="min-h-screen bg-gray-50">

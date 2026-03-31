@@ -187,6 +187,49 @@ export type IcpScoreStreamEvent =
   | { type: 'complete'; results: EnrichedRow[]; error?: never }
   | { type: 'error'; error: string };
 
+export interface IcpJobProgress {
+  stage: 'companies' | 'contacts' | 'complete';
+  processed: number;
+  total: number;
+}
+
+export interface IcpJobState {
+  id: string;
+  status: 'queued' | 'running' | 'complete' | 'error';
+  createdAt: string;
+  updatedAt: string;
+  error: string | null;
+  headers: string[];
+  rows: EnrichedRow[];
+  companyInputs: Array<{
+    key: string;
+    company: string;
+    domain: string;
+    rowIndexes: number[];
+  }>;
+  companyCursor: number;
+  contactInputs: Array<{
+    key: string;
+    companyKey: string;
+    name: string;
+    title: string;
+    email: string;
+    company: string;
+    domain: string;
+    accountPriority: 'p0' | 'p1' | 'p2';
+    icpScore: 3 | 4 | 5;
+    primaryUseCase: string;
+  }>;
+  contactCursor: number;
+  progress: IcpJobProgress;
+}
+
+export interface IcpJobResponse {
+  job: Pick<IcpJobState, 'id' | 'status' | 'progress' | 'error' | 'updatedAt'> & {
+    results?: EnrichedRow[];
+  };
+}
+
 export type OutboundStreamEvent =
   | { type: 'progress'; processed: number; total: number }
   | { type: 'complete'; drafts: OutboundDraft[]; error?: never }
