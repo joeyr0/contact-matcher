@@ -12,8 +12,9 @@ interface IcpScorerProps {
 
 type ScoringState = 'idle' | 'running' | 'complete' | 'error';
 type OutboundState = 'idle' | 'running' | 'complete' | 'error';
-type RunMode = 'score_only' | 'score_and_outbound_direct' | 'score_and_outbound_queue';
+type RunMode = 'score_only' | 'score_sample' | 'score_and_outbound_direct' | 'score_and_outbound_queue';
 const SCORE_HEADERS = ['Full Name', 'Title', 'Email'];
+const SAMPLE_LIMIT = 5;
 
 export default function IcpScorer({ headers, results, onComplete, onError }: IcpScorerProps) {
   const [state, setState] = useState<ScoringState>('idle');
@@ -26,6 +27,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
   const [outboundProgress, setOutboundProgress] = useState({ processed: 0, total: 0 });
   const [outboundScope, setOutboundScope] = useState<OutboundScope>('direct');
   const [drafts, setDrafts] = useState<OutboundDraft[]>([]);
+  const [lastRunWasSample, setLastRunWasSample] = useState(false);
 
   const preparedResults = useMemo(
     () =>
@@ -45,6 +47,14 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
   const directQueueOutboundCandidates = useMemo(
     () => buildOutboundCandidates(headers, results, 'direct_queue'),
     [headers, results],
+  );
+  const eligibleRowIndexes = useMemo(
+    () =>
+      preparedResults
+        .map((row, index) => ({ row, index }))
+        .filter(({ row }) => row.match.accountStatus === 'eligible')
+        .map(({ index }) => index),
+    [preparedResults],
   );
 
   const runOutbound = async (scope: OutboundScope, sourceResults = results) => {
@@ -120,16 +130,27 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
   };
 
   const runScore = async (mode: RunMode = 'score_only') => {
+    const isSampleRun = mode === 'score_sample';
+    const targetIndexes = isSampleRun ? eligibleRowIndexes.slice(0, SAMPLE_LIMIT) : results.map((_, index) => index);
+    if (targetIndexes.length === 0) {
+      setErrorMsg(isSampleRun ? 'No eligible rows available for a test run.' : 'No rows available to score.');
+      setState('error');
+      return;
+    }
+
     setState('running');
     setErrorMsg(null);
     setShowRunMenu(false);
     setOutboundState('idle');
     setOutboundError(null);
     setDrafts([]);
+    setLastRunWasSample(isSampleRun);
 
     let response: Response;
     try {
-      const compactResults: CompactScoreRow[] = results.map((row) => ({
+      const compactResults: CompactScoreRow[] = targetIndexes.map((rowIndex) => {
+        const row = results[rowIndex]!;
+        return {
         originalRow: (() => {
           const contact = extractContactFields(headers, row.originalRow);
           return [contact.name, contact.title, contact.email];
@@ -144,7 +165,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
           isCustomer: row.match.isCustomer,
           accountStatus: row.match.accountStatus,
         },
-      }));
+      }});
       response = await fetch('/api/icp-score/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -185,8 +206,10 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
           if (event.type === 'progress') {
             setProgress({ stage: event.stage, processed: event.processed, total: event.total });
           } else if (event.type === 'complete') {
+            const scoredIndexByOriginalIndex = new Map(targetIndexes.map((originalIndex, scoredIndex) => [originalIndex, scoredIndex]));
             const mergedResults = results.map((row, index) => {
-              const scoredRow = event.results[index];
+              const scoredPosition = scoredIndexByOriginalIndex.get(index) ?? -1;
+              const scoredRow = scoredPosition >= 0 ? event.results[scoredPosition] : undefined;
               if (!scoredRow) return row;
               return {
                 ...row,
@@ -256,6 +279,12 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
                   Run ICP only
                 </button>
                 <button
+                  onClick={() => void runScore('score_sample')}
+                  className="w-full rounded-md px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  Test run first 5 eligible leads
+                </button>
+                <button
                   onClick={() => void runScore('score_and_outbound_direct')}
                   className="w-full rounded-md px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
                 >
@@ -297,7 +326,9 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
       {state === 'complete' && (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-4">
-            <p className="text-sm font-medium text-emerald-900">ICP scoring complete.</p>
+            <p className="text-sm font-medium text-emerald-900">
+              {lastRunWasSample ? `ICP test run complete for ${Math.min(SAMPLE_LIMIT, eligibleRowIndexes.length)} eligible leads.` : 'ICP scoring complete.'}
+            </p>
             <div className="relative flex items-center gap-2">
               <button
                 onClick={() => void runOutbound('direct')}
@@ -346,6 +377,11 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
             Direct leads available: {directOutboundCandidates.length.toLocaleString()} · Direct + queue available:{' '}
             {directQueueOutboundCandidates.length.toLocaleString()}
           </p>
+          {lastRunWasSample && (
+            <p className="text-xs text-amber-700">
+              Only the first {Math.min(SAMPLE_LIMIT, eligibleRowIndexes.length)} eligible leads were scored in this test run. Use Run ICP for the full list.
+            </p>
+          )}
         </div>
       )}
 
