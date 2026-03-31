@@ -82,6 +82,18 @@ const DOMAIN_HEADER_NAMES = new Set([
   'urls',
 ]);
 
+function sanitizeHeaders(headers: string[]): string[] {
+  const seen = new Map<string, number>();
+
+  return headers.map((header, index) => {
+    const trimmed = header.trim();
+    const base = trimmed || `Column ${index + 1}`;
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    return count === 0 ? base : `${base} (${count + 1})`;
+  });
+}
+
 export function parseContactCSV(csvText: string): ParsedContactCSV {
   const result = Papa.parse<string[]>(csvText, {
     header: false,
@@ -107,21 +119,22 @@ export function parseContactCSV(csvText: string): ParsedContactCSV {
     }
   }
 
-  const headers = allRows[headerRowIdx] as string[];
+  const rawHeaders = allRows[headerRowIdx] as string[];
+  const headers = sanitizeHeaders(rawHeaders);
   const rows = allRows.slice(headerRowIdx + 1) as string[][];
 
   if (rows.length === 0) {
     return { headers, rows, emailColIdx: -1, isDomainColumn: false, companyColIdx: -1, error: 'CSV contains no data rows' };
   }
 
-  const companyColIdx = headers.findIndex((h) => isCompanyHeader(h));
+  const companyColIdx = rawHeaders.findIndex((h) => isCompanyHeader(h));
 
   // Step 1: email header match
-  let emailColIdx = headers.findIndex((h) => EMAIL_HEADER_NAMES.has(h.toLowerCase().trim()));
+  let emailColIdx = rawHeaders.findIndex((h) => EMAIL_HEADER_NAMES.has(h.toLowerCase().trim()));
   if (emailColIdx !== -1) return { headers, rows, emailColIdx, isDomainColumn: false, companyColIdx };
 
   // Step 2: domain/website header match
-  const domainColIdx = headers.findIndex((h) => DOMAIN_HEADER_NAMES.has(h.toLowerCase().trim()));
+  const domainColIdx = rawHeaders.findIndex((h) => DOMAIN_HEADER_NAMES.has(h.toLowerCase().trim()));
   if (domainColIdx !== -1) return { headers, rows, emailColIdx: domainColIdx, isDomainColumn: true, companyColIdx };
 
   // Step 3: scan first 10 rows for @ signs (email column)

@@ -71,6 +71,26 @@ describe('parseContactCSV company header detection', () => {
     expect(parsed.companyColIdx).toBe(3);
     expect(parsed.emailColIdx).toBe(1);
   });
+
+  it('sanitizes blank and duplicate headers for stable rendering', () => {
+    const csv = [
+      ',Name,Domain,Description,Fit,Notes,Notes',
+      ',Alpaca,https://alpaca.markets/,Broker API,,',
+    ].join('\n');
+
+    const parsed = parseContactCSV(csv);
+    expect(parsed.headers).toEqual([
+      'Column 1',
+      'Name',
+      'Domain',
+      'Description',
+      'Fit',
+      'Notes',
+      'Notes (2)',
+    ]);
+    expect(parsed.emailColIdx).toBe(2);
+    expect(parsed.isDomainColumn).toBe(true);
+  });
 });
 
 describe('isGenericDomain', () => {
