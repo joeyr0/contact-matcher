@@ -3,7 +3,6 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import formidable from 'formidable';
-import OpenAI from 'openai';
 
 import { buildSheet15Index, buildOptOutIndex, buildCommittedArrIndex } from '../src/lib/indexer.js';
 import { parseContactCSV } from '../src/lib/csv.js';
@@ -12,6 +11,8 @@ import { extractDomain, matchDomain, getCustomerLookup, findPossibleCustomerMatc
 import { hydrateScoreRows, scoreEnrichedRows } from '../src/lib/icpServer.js';
 import { generateOutboundDrafts } from '../src/lib/outboundServer.js';
 import { getDefaultPromptConfig, readPromptConfig, resetPromptValue, updatePromptValue } from '../src/lib/promptConfig.js';
+import { getApiKeyStatuses, resetApiKeyValue, updateApiKeyValue, updateApiProvider } from '../src/lib/apiKeyConfig.js';
+import { callTextCompletion, getConfiguredKey, getConfiguredProvider } from '../src/lib/aiProvider.js';
 import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import { checkRedirects } from '../src/lib/redirect.js';
 import { matchByCompanyName } from '../src/lib/matcher.js';
@@ -219,6 +220,39 @@ app.post('/api/prompts', (req, res) => {
     return;
   }
   res.json({ prompts: resetPromptValue(key) });
+});
+
+app.get('/api/api-keys', (_req, res) => {
+  res.json({ keys: getApiKeyStatuses() });
+});
+
+app.put('/api/api-keys', (req, res) => {
+  const { provider, value, mode } = req.body as { provider?: string; value?: string; mode?: string };
+  if ((provider !== 'openai' && provider !== 'anthropic') || (mode !== 'default' && mode !== 'override')) {
+    res.status(400).json({ error: 'provider and mode are required' });
+    return;
+  }
+  updateApiProvider(provider);
+  if (mode === 'override') {
+    if (typeof value !== 'string' || !value.trim()) {
+      res.status(400).json({ error: 'non-empty value is required for override mode' });
+      return;
+    }
+    updateApiKeyValue(provider, value.trim());
+  } else {
+    resetApiKeyValue(provider);
+  }
+  res.json({ keys: getApiKeyStatuses() });
+});
+
+app.post('/api/api-keys', (req, res) => {
+  const { provider, action } = req.body as { provider?: string; action?: string };
+  if ((provider !== 'openai' && provider !== 'anthropic') || action !== 'reset') {
+    res.status(400).json({ error: 'provider and action=reset are required' });
+    return;
+  }
+  resetApiKeyValue(provider);
+  res.json({ keys: getApiKeyStatuses() });
 });
 
 // ---------------------------------------------------------------------------
@@ -489,28 +523,17 @@ app.post('/api/fuzzy-match', async (req, res) => {
     return;
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = getConfiguredKey();
   if (!apiKey) {
-    res.status(500).json({ error: 'OPENAI_API_KEY not set in .env' });
+    res.status(500).json({ error: `${getConfiguredProvider() === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY'} not configured` });
     return;
   }
 
-  const client = new OpenAI({ apiKey });
   const { system, user } = buildFuzzyPrompt(needsLLMAfterCompany, candidates);
 
   let responseText = '';
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    try {
-      const completion = await client.chat.completions.create(
-        { model: 'gpt-4o-mini', max_tokens: 1024, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },
-        { signal: controller.signal },
-      );
-      responseText = completion.choices[0]?.message?.content ?? '';
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    responseText = await callTextCompletion(system, user);
   } catch (e) {
     const result: FuzzyBatchResult = {
       matches: validatedMatches,

@@ -60,6 +60,26 @@ export interface PromptConfig {
   outbound: PromptEntry;
 }
 
+export interface ApiKeyEntry {
+  value: string;
+  lastUpdated: string | null;
+}
+
+export interface ApiKeyConfig {
+  openai: ApiKeyEntry;
+  anthropic: ApiKeyEntry;
+  provider: 'openai' | 'anthropic';
+}
+
+export interface ApiKeyStatusEntry {
+  provider: 'openai' | 'anthropic';
+  label: string;
+  active: boolean;
+  source: 'saved' | 'environment' | 'missing';
+  maskedValue: string;
+  lastUpdated: string | null;
+}
+
 export interface UploadResponse {
   success: boolean;
   rowCount: number;

@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import OpenAI from 'openai';
 import { buildDomainLookup, getFastCandidates, rankAndLimitCandidates, buildFuzzyPrompt, parseFuzzyResponse } from '../src/lib/fuzzy.js';
 import { checkRedirects } from '../src/lib/redirect.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
 import { matchByName, matchByCompanyName, buildAccountNameIndex, matchDomain } from '../src/lib/matcher.js';
+import { callTextCompletion, getConfiguredKey, getConfiguredProvider } from '../src/lib/aiProvider.js';
 import { readDataJSON } from './lib/readData.js';
 import type { Sheet15Index, OptOutIndex, CommittedArrIndex, FuzzyBatchResult } from '../src/lib/types.js';
 
@@ -115,27 +115,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ matches: validatedMatches, failedDomains: needsLLMAfterCompany } as FuzzyBatchResult);
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = getConfiguredKey();
   if (!apiKey) {
-    return res.status(500).json({ error: 'OPENAI_API_KEY not configured.' });
+    return res.status(500).json({ error: `${getConfiguredProvider() === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY'} not configured.` });
   }
-
-  const client = new OpenAI({ apiKey });
   const { system, user } = buildFuzzyPrompt(needsLLMAfterCompany, candidates);
 
   let responseText = '';
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    try {
-      const completion = await client.chat.completions.create(
-        { model: 'gpt-4o-mini', max_tokens: 1024, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },
-        { signal: controller.signal },
-      );
-      responseText = completion.choices[0]?.message?.content ?? '';
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    responseText = await callTextCompletion(system, user);
   } catch (err) {
     return res.status(200).json({
       matches: validatedMatches,

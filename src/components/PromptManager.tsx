@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { PromptConfig } from '../lib/types';
+import type { ApiKeyStatusEntry, PromptConfig } from '../lib/types';
 
 interface PromptPayload {
   prompts: PromptConfig;
   defaults: PromptConfig;
+}
+
+interface ApiKeyPayload {
+  keys: ApiKeyStatusEntry[];
 }
 
 function formatDate(iso: string | null): string {
@@ -134,6 +138,208 @@ function PromptEditor({ label, description, promptKey, prompts, defaults, onRefr
   );
 }
 
+function formatKeySource(source: ApiKeyStatusEntry['source']): string {
+  if (source === 'saved') return 'Using saved override';
+  if (source === 'environment') return 'Using default environment key';
+  return 'No key configured';
+}
+
+function ApiKeyManager() {
+  const [keys, setKeys] = useState<ApiKeyStatusEntry[]>([]);
+  const [provider, setProvider] = useState<'openai' | 'anthropic'>('openai');
+  const [mode, setMode] = useState<'default' | 'override'>('default');
+  const [value, setValue] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/api-keys');
+      const data = (await res.json()) as ApiKeyPayload & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setKeys(data.keys);
+      const current = data.keys.find((entry) => entry.provider === provider);
+      setMode(current?.source === 'saved' ? 'override' : 'default');
+      setError(null);
+    } catch (err) {
+      setError(`Could not load API keys: ${String(err)}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [provider]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    const current = keys.find((entry) => entry.provider === provider);
+    setMode(current?.source === 'saved' ? 'override' : 'default');
+    setValue('');
+    setMessage(null);
+    setError(null);
+  }, [keys, provider]);
+
+  const current = keys.find((entry) => entry.provider === provider);
+
+  const save = async () => {
+    if (mode === 'default') {
+      setSaving(true);
+      setMessage(null);
+      setError(null);
+      try {
+        const res = await fetch('/api/api-keys', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, mode: 'default' }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+        setKeys((data as ApiKeyPayload).keys);
+        setValue('');
+        setMessage('Switched back to default key');
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await fetch('/api/api-keys', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, mode: 'override', value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setKeys((data as ApiKeyPayload).keys);
+      setValue('');
+      setMessage('Saved key override');
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="mb-4">
+        <h3 className="text-base font-semibold text-gray-900">API Keys</h3>
+        <p className="mt-0.5 text-sm text-gray-500">
+          Use the default server key or save your own override for OpenAI or Claude.
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-[220px,1fr]">
+        <div>
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Provider</label>
+          <select
+            value={provider}
+            onChange={(e) => setProvider(e.target.value as 'openai' | 'anthropic')}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-blue-400 focus:outline-none"
+          >
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Claude / Anthropic</option>
+          </select>
+        </div>
+
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          {loading ? (
+            <p className="text-sm text-gray-500">Loading key status…</p>
+          ) : current ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-gray-900">{current.label}</span>
+                <span
+                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                    current.source === 'saved'
+                      ? 'bg-blue-100 text-blue-700'
+                      : current.source === 'environment'
+                        ? 'bg-gray-100 text-gray-700'
+                        : 'bg-amber-100 text-amber-700'
+                  }`}
+                >
+                  {formatKeySource(current.source)}
+                </span>
+                {current.active && (
+                  <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                    Active provider
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">Current key: {current.maskedValue}</p>
+              {current.lastUpdated && (
+                <p className="mt-1 text-xs text-gray-400">
+                  Saved {new Date(current.lastUpdated).toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
+                </p>
+              )}
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="radio"
+            checked={mode === 'default'}
+            onChange={() => setMode('default')}
+          />
+          Use default key
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="radio"
+            checked={mode === 'override'}
+            onChange={() => setMode('override')}
+          />
+          Enter my own key
+        </label>
+      </div>
+
+      {mode === 'override' && (
+        <div className="mt-4">
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">API key</label>
+          <input
+            type="password"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={provider === 'openai' ? 'sk-proj-...' : 'sk-ant-...'}
+            className="w-full rounded-lg border border-gray-300 px-4 py-3 font-mono text-xs text-gray-800 focus:border-blue-400 focus:outline-none"
+          />
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          onClick={() => void save()}
+          disabled={saving || (mode === 'override' && !value.trim())}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Save
+        </button>
+        {message && <span className="text-sm text-green-700">{message}</span>}
+        {error && <span className="text-sm text-red-700">{error}</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function PromptManager() {
   const [payload, setPayload] = useState<PromptPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -171,6 +377,7 @@ export default function PromptManager() {
 
       {payload && (
         <div className="grid gap-6">
+          <ApiKeyManager />
           <PromptEditor
             label="ICP Scoring Prompt"
             description="Company scoring system prompt used by the ICP scorer."

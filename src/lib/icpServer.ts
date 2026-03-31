@@ -1,4 +1,3 @@
-import OpenAI from 'openai';
 import type { CompactScoreRow, EnrichedRow, MatchResult } from './types';
 import {
   applyDeterministicAccountRoute,
@@ -23,8 +22,7 @@ import {
 } from './icp';
 import { readPromptConfig } from './promptConfig';
 import { DEFAULT_CONTACT_PROMPT, DEFAULT_ICP_PROMPT } from './promptDefaults';
-
-const MODEL = process.env.OPENAI_SCORING_MODEL || 'gpt-5-mini';
+import { callStructuredJson } from './aiProvider';
 
 const COMPANY_BATCH_SIZE = 20;
 const CONTACT_BATCH_SIZE = 25;
@@ -58,23 +56,7 @@ function normalizeScore(value: unknown): 1 | 2 | 3 | 4 | 5 {
   return 2;
 }
 
-async function callOpenAIJson<T>(client: OpenAI, systemPrompt: string, userPayload: unknown): Promise<T> {
-  const completion = await client.chat.completions.create({
-    model: MODEL,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: JSON.stringify(userPayload) },
-    ],
-  });
-
-  const content = completion.choices[0]?.message?.content ?? '';
-  if (!content) throw new Error('Empty scoring response from OpenAI');
-  return JSON.parse(content) as T;
-}
-
 async function scoreCompaniesWithLLM(
-  client: OpenAI,
   companies: CompanyScoreInput[],
   onProgress?: (stage: 'companies' | 'contacts', processed: number, total: number) => void,
 ): Promise<Map<string, CompanyScoreResult>> {
@@ -84,7 +66,11 @@ async function scoreCompaniesWithLLM(
   for (let i = 0; i < batches.length; i++) {
     const batch = batches[i] ?? [];
     const payload = { companies: batch };
-    const response = await callOpenAIJson<{ companies?: Array<Record<string, unknown>> }>(client, getCompanyPrompt(), payload);
+    const response = await callStructuredJson<{ companies?: Array<Record<string, unknown>> }>(
+      getCompanyPrompt(),
+      payload,
+      'scoring',
+    );
     for (const raw of response.companies ?? []) {
       const key = String(raw.key ?? '');
       if (!key) continue;
@@ -106,7 +92,6 @@ async function scoreCompaniesWithLLM(
 }
 
 async function scoreContactsWithLLM(
-  client: OpenAI,
   contacts: ContactScoreInput[],
   onProgress?: (stage: 'companies' | 'contacts', processed: number, total: number) => void,
 ): Promise<Map<string, ContactScoreResult>> {
@@ -116,7 +101,11 @@ async function scoreContactsWithLLM(
   for (let i = 0; i < batches.length; i++) {
     const batch = batches[i] ?? [];
     const payload = { contacts: batch };
-    const response = await callOpenAIJson<{ contacts?: Array<Record<string, unknown>> }>(client, getContactPrompt(), payload);
+    const response = await callStructuredJson<{ contacts?: Array<Record<string, unknown>> }>(
+      getContactPrompt(),
+      payload,
+      'scoring',
+    );
     for (const raw of response.contacts ?? []) {
       const key = String(raw.key ?? '');
       if (!key) continue;
@@ -244,18 +233,13 @@ export async function scoreEnrichedRows(
     return nextRows;
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
-
-  const client = new OpenAI({ apiKey });
-
   const companyInputs: CompanyScoreInput[] = companies.map((company) => ({
     key: company.key,
     company: company.company,
     domain: company.domain,
   }));
 
-  const companyScores = await scoreCompaniesWithLLM(client, companyInputs, onProgress);
+  const companyScores = await scoreCompaniesWithLLM(companyInputs, onProgress);
 
   for (const company of companies) {
     const score = companyScores.get(company.key);
@@ -326,7 +310,7 @@ export async function scoreEnrichedRows(
   });
 
   if (contactInputs.length > 0) {
-    const contactScores = await scoreContactsWithLLM(client, contactInputs, onProgress);
+    const contactScores = await scoreContactsWithLLM(contactInputs, onProgress);
     for (const input of contactInputs) {
       const score = contactScores.get(input.key);
       if (!score) continue;

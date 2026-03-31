@@ -100,7 +100,7 @@ export default function FuzzyMatcher({ results, onFuzzyUpdates }: FuzzyMatcherPr
     }
 
     if (allBatchesFailed && totalBatches > 0) {
-      setErrorMsg('All fuzzy matching batches failed. Check that OPENAI_API_KEY is set in your .env file.');
+      setErrorMsg('All fuzzy matching batches failed. Check that your active AI provider key is configured in Prompts → API Keys.');
       setState('error');
     } else {
       setState('complete');

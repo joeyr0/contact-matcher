@@ -1,9 +1,7 @@
-import OpenAI from 'openai';
 import type { OutboundCandidate, OutboundDraft } from './types';
 import { readPromptConfig } from './promptConfig';
 import { DEFAULT_OUTBOUND_PROMPT } from './promptDefaults';
-
-const MODEL = process.env.OPENAI_OUTBOUND_MODEL || process.env.OPENAI_SCORING_MODEL || 'gpt-5-mini';
+import { callStructuredJson } from './aiProvider';
 const OUTBOUND_BATCH_SIZE = 8;
 
 function getOutboundPrompt(): string {
@@ -18,36 +16,21 @@ function batchArray<T>(items: T[], size: number): T[][] {
   return batches;
 }
 
-async function callOpenAIJson<T>(client: OpenAI, userPayload: unknown): Promise<T> {
-  const completion = await client.chat.completions.create({
-    model: MODEL,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: getOutboundPrompt() },
-      { role: 'user', content: JSON.stringify(userPayload) },
-    ],
-  });
-
-  const content = completion.choices[0]?.message?.content ?? '';
-  if (!content) throw new Error('Empty outbound response from OpenAI');
-  return JSON.parse(content) as T;
-}
-
 export async function generateOutboundDrafts(
   candidates: OutboundCandidate[],
   onProgress?: (processed: number, total: number) => void,
 ): Promise<OutboundDraft[]> {
   if (candidates.length === 0) return [];
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
-
-  const client = new OpenAI({ apiKey });
   const drafts: OutboundDraft[] = [];
   const batches = batchArray(candidates, OUTBOUND_BATCH_SIZE);
 
   for (let i = 0; i < batches.length; i++) {
     const batch = batches[i] ?? [];
-    const response = await callOpenAIJson<{ drafts?: Array<Record<string, unknown>> }>(client, { leads: batch });
+    const response = await callStructuredJson<{ drafts?: Array<Record<string, unknown>> }>(
+      getOutboundPrompt(),
+      { leads: batch },
+      'outbound',
+    );
     for (const raw of response.drafts ?? []) {
       const key = String(raw.key ?? '');
       if (!key) continue;
