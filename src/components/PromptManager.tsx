@@ -10,6 +10,15 @@ interface ApiKeyPayload {
   keys: ApiKeyStatusEntry[];
 }
 
+async function readJsonResponse<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return 'Default prompt';
   return `Saved ${new Date(iso).toLocaleString('en-US', {
@@ -53,7 +62,7 @@ function PromptEditor({ label, description, promptKey, prompts, defaults, onRefr
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: promptKey, value }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse<{ prompts?: PromptConfig; error?: string }>(res);
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       await onRefresh();
       setMessage('Saved');
@@ -74,7 +83,7 @@ function PromptEditor({ label, description, promptKey, prompts, defaults, onRefr
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: promptKey, action: 'reset' }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse<{ prompts?: PromptConfig; error?: string }>(res);
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       await onRefresh();
       setMessage('Reset to default');
@@ -158,7 +167,7 @@ function ApiKeyManager() {
     setLoading(true);
     try {
       const res = await fetch('/api/api-keys');
-      const data = (await res.json()) as ApiKeyPayload & { error?: string };
+      const data = await readJsonResponse<ApiKeyPayload & { error?: string }>(res);
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       setKeys(data.keys);
       const current = data.keys.find((entry) => entry.provider === provider);
@@ -196,9 +205,9 @@ function ApiKeyManager() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ provider, mode: 'default' }),
         });
-        const data = await res.json();
+        const data = await readJsonResponse<ApiKeyPayload & { error?: string }>(res);
         if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-        setKeys((data as ApiKeyPayload).keys);
+        setKeys(data.keys);
         setValue('');
         setMessage('Switched back to default key');
       } catch (err) {
@@ -218,9 +227,9 @@ function ApiKeyManager() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider, mode: 'override', value }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse<ApiKeyPayload & { error?: string }>(res);
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      setKeys((data as ApiKeyPayload).keys);
+      setKeys(data.keys);
       setValue('');
       setMessage('Saved key override');
     } catch (err) {
@@ -347,7 +356,7 @@ export default function PromptManager() {
   const fetchPrompts = useCallback(async () => {
     try {
       const res = await fetch('/api/prompts');
-      const data = (await res.json()) as PromptPayload & { error?: string };
+      const data = await readJsonResponse<PromptPayload & { error?: string }>(res);
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       setPayload(data);
       setError(null);
