@@ -6,6 +6,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
   const payload = {
     ok: true,
     tokenPresent,
+    blobAccessMode: 'public',
     runtime: process.env.VERCEL ? 'vercel' : 'local',
     writableFallback: process.env.VERCEL ? '/tmp/contact-matcher-data' : 'project-data-dir',
     timestamp: new Date().toISOString(),
