@@ -4,6 +4,10 @@ import { fileURLToPath } from 'url';
 import { get, put } from '@vercel/blob';
 
 function getDataDir(): string {
+  if (process.env.VERCEL) {
+    return '/tmp/contact-matcher-data';
+  }
+
   try {
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const relative = path.resolve(__dirname, '../../data');

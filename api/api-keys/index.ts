@@ -4,7 +4,7 @@ import {
   resetApiKeyValueAsync,
   updateApiProviderAsync,
   updateApiKeyValueAsync,
-} from '../../../src/lib/apiKeyConfig.js';
+} from '../../src/lib/apiKeyConfig.js';
 type Provider = 'openai' | 'anthropic';
 
 function isProvider(value: unknown): value is Provider {
