@@ -211,6 +211,7 @@ function buildVisibilityPreset(headers: string[], tableView: TableView, detailMo
     visibility['icp_score'] = true;
     visibility['primary_use_case'] = true;
     visibility['contact_priority'] = true;
+    visibility['match_confidence'] = true;
     visibility['account_status'] = detailMode === 'detailed';
     visibility['icp_confidence'] = detailMode === 'detailed';
     visibility['tvc_relevance'] = detailMode === 'detailed';
@@ -219,7 +220,6 @@ function buildVisibilityPreset(headers: string[], tableView: TableView, detailMo
     visibility['role_fit'] = detailMode === 'detailed';
     visibility['contact_reason_summary'] = detailMode === 'detailed';
     visibility['sf_website'] = detailMode === 'detailed';
-    visibility['match_confidence'] = detailMode === 'detailed';
     visibility['match_method'] = detailMode === 'detailed';
     visibility['customer_match_confidence'] = detailMode === 'detailed';
     visibility['customer_match_method'] = detailMode === 'detailed';
