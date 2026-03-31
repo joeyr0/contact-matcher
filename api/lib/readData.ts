@@ -3,11 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { get, put } from '@vercel/blob';
 
-function getDataDir(): string {
-  if (process.env.VERCEL) {
-    return '/tmp/contact-matcher-data';
-  }
-
+function getBundledDataDir(): string {
   try {
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const relative = path.resolve(__dirname, '../../data');
@@ -19,7 +15,15 @@ function getDataDir(): string {
   return path.join(process.cwd(), 'data');
 }
 
-const DATA_DIR = getDataDir();
+function getWritableDataDir(): string {
+  if (process.env.VERCEL) {
+    return '/tmp/contact-matcher-data';
+  }
+  return getBundledDataDir();
+}
+
+const BUNDLED_DATA_DIR = getBundledDataDir();
+const WRITABLE_DATA_DIR = getWritableDataDir();
 const BLOB_PREFIX = 'contact-matcher-data/';
 
 function shouldUseBlob(): boolean {
@@ -31,32 +35,35 @@ function getBlobPath(name: string): string {
 }
 
 export async function readDataJSON<T>(name: string): Promise<T | null> {
-  if (!shouldUseBlob()) {
+  if (shouldUseBlob()) {
     try {
-      const filePath = path.join(DATA_DIR, name);
+      const result = await get(getBlobPath(name), { access: 'private' });
+      if (result) {
+        const text = await new Response(result.stream).text();
+        return JSON.parse(text) as T;
+      }
+    } catch {
+      // fall through to local reads
+    }
+  }
+
+  for (const dir of [WRITABLE_DATA_DIR, BUNDLED_DATA_DIR]) {
+    try {
+      const filePath = path.join(dir, name);
       if (fs.existsSync(filePath)) {
         return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
       }
     } catch {
-      return null;
+      // keep trying fallbacks
     }
-    return null;
   }
-
-  try {
-    const result = await get(getBlobPath(name), { access: 'private' });
-    if (!result) return null;
-    const text = await new Response(result.stream).text();
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 export async function writeDataJSON(name: string, data: unknown): Promise<void> {
   if (!shouldUseBlob()) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(path.join(DATA_DIR, name), JSON.stringify(data), 'utf-8');
+    fs.mkdirSync(WRITABLE_DATA_DIR, { recursive: true });
+    fs.writeFileSync(path.join(WRITABLE_DATA_DIR, name), JSON.stringify(data), 'utf-8');
     return;
   }
 
