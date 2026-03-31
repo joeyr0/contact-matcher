@@ -185,12 +185,23 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
           if (event.type === 'progress') {
             setProgress({ stage: event.stage, processed: event.processed, total: event.total });
           } else if (event.type === 'complete') {
+            const mergedResults = results.map((row, index) => {
+              const scoredRow = event.results[index];
+              if (!scoredRow) return row;
+              return {
+                ...row,
+                match: {
+                  ...row.match,
+                  ...scoredRow.match,
+                },
+              };
+            });
             setState('complete');
-            onComplete(event.results);
+            onComplete(mergedResults);
             if (mode === 'score_and_outbound_direct') {
-              void runOutbound('direct', event.results);
+              void runOutbound('direct', mergedResults);
             } else if (mode === 'score_and_outbound_queue') {
-              void runOutbound('direct_queue', event.results);
+              void runOutbound('direct_queue', mergedResults);
             }
           } else if (event.type === 'error') {
             setErrorMsg(event.error);
