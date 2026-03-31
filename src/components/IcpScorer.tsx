@@ -16,6 +16,22 @@ type RunMode = 'score_only' | 'score_sample' | 'score_and_outbound_direct' | 'sc
 const SCORE_HEADERS = ['Full Name', 'Title', 'Email'];
 const SAMPLE_LIMIT = 5;
 const ACTIVE_JOB_STORAGE_KEY = 'contact-matcher:active-icp-job';
+const SCORING_MATCH_FIELDS = [
+  'accountStatus',
+  'accountPriority',
+  'icpScore',
+  'icpConfidence',
+  'primaryUseCase',
+  'tvcScore',
+  'tvcRelevance',
+  'icpReasonSummary',
+  'isCompetitor',
+  'contactScore',
+  'contactPriority',
+  'roleFit',
+  'contactReasonSummary',
+  'leadPriority',
+] as const;
 
 export default function IcpScorer({ headers, results, onComplete, onError }: IcpScorerProps) {
   const [state, setState] = useState<ScoringState>('idle');
@@ -60,6 +76,17 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
         .map(({ index }) => index),
     [preparedResults],
   );
+
+  const mergeScoredMatch = (existing: EnrichedRow['match'], scored?: Partial<EnrichedRow['match']>) => {
+    if (!scored) return existing;
+    const next = { ...existing };
+    for (const key of SCORING_MATCH_FIELDS) {
+      if (key in scored) {
+        next[key] = scored[key] as never;
+      }
+    }
+    return next;
+  };
 
   const runOutbound = async (scope: OutboundScope, sourceResults = results) => {
     const candidates = buildOutboundCandidates(headers, sourceResults, scope);
@@ -293,10 +320,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
             if (!scoredRow) return row;
             return {
               ...row,
-              match: {
-                ...row.match,
-                ...scoredRow.match,
-              },
+              match: mergeScoredMatch(row.match, scoredRow.match),
             };
           });
           setState('complete');
