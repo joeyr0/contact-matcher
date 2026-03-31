@@ -1,6 +1,6 @@
 import type { EnrichedRow, MatchResult } from './types';
-import { normalizeDomain, isGenericDomain } from './normalize';
-import { canonicalizeCustomerName, getDomainRoot } from './matcher';
+import { normalizeDomain, isGenericDomain } from './normalize.js';
+import { canonicalizeCustomerName, getDomainRoot } from './matcher.js';
 
 export type AccountStatus = MatchResult['accountStatus'];
 export type AccountPriority = MatchResult['accountPriority'];

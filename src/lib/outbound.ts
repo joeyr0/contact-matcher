@@ -1,4 +1,4 @@
-import { extractContactFields, getPreferredCompanyDomain, getPreferredCompanyName } from './icp';
+import { extractContactFields, getPreferredCompanyDomain, getPreferredCompanyName } from './icp.js';
 import type { EnrichedRow, OutboundCandidate } from './types';
 
 export type OutboundScope = 'direct' | 'direct_queue';

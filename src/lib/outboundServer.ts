@@ -1,7 +1,7 @@
 import type { OutboundCandidate, OutboundDraft } from './types';
-import { readPromptConfig } from './promptConfig';
-import { DEFAULT_OUTBOUND_PROMPT } from './promptDefaults';
-import { callStructuredJson } from './aiProvider';
+import { readPromptConfig } from './promptConfig.js';
+import { DEFAULT_OUTBOUND_PROMPT } from './promptDefaults.js';
+import { callStructuredJson } from './aiProvider.js';
 const OUTBOUND_BATCH_SIZE = 8;
 
 function getOutboundPrompt(): string {

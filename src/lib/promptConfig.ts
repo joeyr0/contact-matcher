@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { DEFAULT_CONTACT_PROMPT, DEFAULT_ICP_PROMPT, DEFAULT_OUTBOUND_PROMPT } from './promptDefaults';
+import { DEFAULT_CONTACT_PROMPT, DEFAULT_ICP_PROMPT, DEFAULT_OUTBOUND_PROMPT } from './promptDefaults.js';
 import type { PromptConfig } from './types';
 import { readDataJSON, writeDataJSON } from '../../api/lib/readData.js';
 

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import { getActiveProvider, getActiveProviderAsync, getResolvedApiKey, getResolvedApiKeyAsync, type ApiProvider } from './apiKeyConfig';
+import { getActiveProvider, getActiveProviderAsync, getResolvedApiKey, getResolvedApiKeyAsync, type ApiProvider } from './apiKeyConfig.js';
 
 const OPENAI_MODEL = process.env.OPENAI_SCORING_MODEL || 'gpt-5-mini';
 const OPENAI_OUTBOUND_MODEL = process.env.OPENAI_OUTBOUND_MODEL || process.env.OPENAI_SCORING_MODEL || 'gpt-5-mini';

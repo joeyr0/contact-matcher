@@ -19,10 +19,10 @@ import {
   type CompanyScoreResult,
   type ContactScoreInput,
   type ContactScoreResult,
-} from './icp';
-import { readPromptConfig } from './promptConfig';
-import { DEFAULT_CONTACT_PROMPT, DEFAULT_ICP_PROMPT } from './promptDefaults';
-import { callStructuredJson } from './aiProvider';
+} from './icp.js';
+import { readPromptConfig } from './promptConfig.js';
+import { DEFAULT_CONTACT_PROMPT, DEFAULT_ICP_PROMPT } from './promptDefaults.js';
+import { callStructuredJson } from './aiProvider.js';
 
 const COMPANY_BATCH_SIZE = 20;
 const CONTACT_BATCH_SIZE = 25;
