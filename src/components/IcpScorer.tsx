@@ -306,7 +306,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium text-emerald-900">
-              Scoring {progress.stage}…
+              {progress.stage === 'contacts' ? 'Model-reviewing contacts…' : 'Scoring companies…'}
             </span>
             <span className="text-emerald-700">
               {progress.total > 0 ? `${progress.processed}/${progress.total}` : 'Starting'}
@@ -320,6 +320,11 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
               }}
             />
           </div>
+          {progress.stage === 'contacts' && (
+            <p className="text-xs text-emerald-700">
+              This contact count reflects only roles that need an LLM review. Obvious buyer, connector, and excluded roles are scored deterministically and do not appear here.
+            </p>
+          )}
         </div>
       )}
 
