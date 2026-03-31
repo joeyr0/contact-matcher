@@ -125,11 +125,8 @@ export interface CompactScoreRow {
       | 'sfMatchedDomain'
       | 'sfOptOut'
       | 'sfOptOutSpecificContacts'
-      | 'sfOptOutNotes'
       | 'isCustomer'
-      | 'isCompetitor'
       | 'accountStatus'
-      | 'icpReasonSummary'
     >
   >;
 }

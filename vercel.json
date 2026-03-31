@@ -4,7 +4,7 @@
   "functions": {
     "api/**/*.ts": {
       "includeFiles": "data/*.json",
-      "maxDuration": 30
+      "maxDuration": 120
     }
   },
   "rewrites": [

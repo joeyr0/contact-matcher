@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { CompactScoreRow, EnrichedRow, IcpScoreStreamEvent, OutboundDraft, OutboundStreamEvent } from '../lib/types';
-import { buildScoreableCompanies, classifyAccountRoute } from '../lib/icp';
+import { buildScoreableCompanies, classifyAccountRoute, extractContactFields } from '../lib/icp';
 import { buildOutboundCandidates, type OutboundScope } from '../lib/outbound';
 
 interface IcpScorerProps {
@@ -13,6 +13,7 @@ interface IcpScorerProps {
 type ScoringState = 'idle' | 'running' | 'complete' | 'error';
 type OutboundState = 'idle' | 'running' | 'complete' | 'error';
 type RunMode = 'score_only' | 'score_and_outbound_direct' | 'score_and_outbound_queue';
+const SCORE_HEADERS = ['Full Name', 'Title', 'Email'];
 
 export default function IcpScorer({ headers, results, onComplete, onError }: IcpScorerProps) {
   const [state, setState] = useState<ScoringState>('idle');
@@ -129,7 +130,10 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
     let response: Response;
     try {
       const compactResults: CompactScoreRow[] = results.map((row) => ({
-        originalRow: row.originalRow,
+        originalRow: (() => {
+          const contact = extractContactFields(headers, row.originalRow);
+          return [contact.name, contact.title, contact.email];
+        })(),
         domain: row.domain,
         companyName: row.companyName,
         match: {
@@ -137,17 +141,14 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
           sfMatchedDomain: row.match.sfMatchedDomain,
           sfOptOut: row.match.sfOptOut,
           sfOptOutSpecificContacts: row.match.sfOptOutSpecificContacts,
-          sfOptOutNotes: row.match.sfOptOutNotes,
           isCustomer: row.match.isCustomer,
-          isCompetitor: row.match.isCompetitor,
           accountStatus: row.match.accountStatus,
-          icpReasonSummary: row.match.icpReasonSummary,
         },
       }));
       response = await fetch('/api/icp-score/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ headers, results: compactResults }),
+        body: JSON.stringify({ headers: SCORE_HEADERS, results: compactResults }),
       });
     } catch (error) {
       const message = `Network error: ${String(error)}`;
