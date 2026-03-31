@@ -128,6 +128,24 @@ export default function ContactUpload({
         </p>
       </div>
 
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p className="font-medium">CSV requirements</p>
+        <ul className="mt-2 space-y-1 text-xs text-amber-800">
+          <li>The first row must be the header row.</li>
+          <li>Include at least one email column or one website/domain column.</li>
+          <li>Column headers should be in row 1, not after blank rows or notes.</li>
+          <li>The first column should not be blank.</li>
+          <li>Avoid duplicate column names when possible.</li>
+        </ul>
+        <p className="mt-3 font-medium">No-nos</p>
+        <ul className="mt-2 space-y-1 text-xs text-amber-800">
+          <li>Do not upload sheets with intro text or notes above the header row.</li>
+          <li>Do not leave the first header cell empty.</li>
+          <li>Do not rely on merged cells or formatted spreadsheet exports.</li>
+          <li>Do not upload XLSX or Numbers files directly. Export to CSV first.</li>
+        </ul>
+      </div>
+
       {/* Column mode selector */}
       <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
         {MODE_OPTIONS.map((opt) => (
