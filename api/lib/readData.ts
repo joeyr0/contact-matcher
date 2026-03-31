@@ -37,7 +37,7 @@ function getBlobPath(name: string): string {
 export async function readDataJSON<T>(name: string): Promise<T | null> {
   if (shouldUseBlob()) {
     try {
-      const result = await get(getBlobPath(name), { access: 'private' });
+      const result = await get(getBlobPath(name), { access: 'public' });
       if (result) {
         const text = await new Response(result.stream).text();
         return JSON.parse(text) as T;
@@ -68,7 +68,7 @@ export async function writeDataJSON(name: string, data: unknown): Promise<void> 
   }
 
   await put(getBlobPath(name), JSON.stringify(data), {
-    access: 'private',
+    access: 'public',
     addRandomSuffix: false,
     allowOverwrite: true,
     contentType: 'application/json',
