@@ -228,6 +228,7 @@ export interface IcpJobResponse {
   job: Pick<IcpJobState, 'id' | 'status' | 'progress' | 'error' | 'updatedAt'> & {
     results?: EnrichedRow[];
   };
+  jobState?: IcpJobState;
 }
 
 export type OutboundStreamEvent =

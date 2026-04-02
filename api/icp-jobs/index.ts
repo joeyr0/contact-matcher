@@ -1,11 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createIcpJobState, hydrateScoreRows } from '../../src/lib/icpServer.js';
 import type { CompactScoreRow, IcpJobResponse } from '../../src/lib/types.js';
-import { readDataJSON, writeDataJSON } from '../lib/readData.js';
-
-function jobFile(id: string): string {
-  return `icp-job-${id}.json`;
-}
 
 export const config = {
   api: {
@@ -27,8 +22,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse<Ic
 
   const id = crypto.randomUUID();
   const job = createIcpJobState(headers as string[], hydrateScoreRows(results as CompactScoreRow[]), id);
-  await writeDataJSON(jobFile(id), job);
 
+  // Return the full job state so the client can hold it and pass it back on each
+  // advance call — avoids needing Vercel Blob or shared /tmp between instances.
   return res.status(200).json({
     job: {
       id: job.id,
@@ -38,5 +34,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse<Ic
       updatedAt: job.updatedAt,
       results: job.status === 'complete' ? job.rows : undefined,
     },
+    jobState: job,
   });
 }

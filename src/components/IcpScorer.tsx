@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { CompactScoreRow, EnrichedRow, IcpJobResponse, OutboundDraft, OutboundStreamEvent } from '../lib/types';
+import type { CompactScoreRow, EnrichedRow, IcpJobResponse, IcpJobState, OutboundDraft, OutboundStreamEvent } from '../lib/types';
 import { buildScoreableCompanies, classifyAccountRoute, extractContactFields } from '../lib/icp';
 import { buildOutboundCandidates, type OutboundScope } from '../lib/outbound';
 
@@ -46,6 +46,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
   const [drafts, setDrafts] = useState<OutboundDraft[]>([]);
   const [lastRunWasSample, setLastRunWasSample] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [currentJobState, setCurrentJobState] = useState<IcpJobState | null>(null);
   const [lastRunMode, setLastRunMode] = useState<RunMode>('score_only');
   const [runTargetIndexes, setRunTargetIndexes] = useState<number[]>([]);
 
@@ -224,6 +225,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
     try {
       const data = (await response.json()) as IcpJobResponse;
       setJobId(data.job.id);
+      if (data.jobState) setCurrentJobState(data.jobState);
       window.localStorage.setItem(
         ACTIVE_JOB_STORAGE_KEY,
         JSON.stringify({
@@ -277,6 +279,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
           response = await fetch(`/api/icp-jobs/${jobId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jobState: currentJobState }),
           });
         } catch (error) {
           if (!cancelled && retryCount < MAX_RETRIES) {
@@ -312,6 +315,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
         retryCount = 0;
         const data = (await response.json()) as IcpJobResponse;
         if (cancelled) return;
+        if (data.jobState) setCurrentJobState(data.jobState);
         const job = data.job;
         setProgress(job.progress);
 
@@ -358,7 +362,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
     return () => {
       cancelled = true;
     };
-  }, [eligibleRowIndexes, jobId, lastRunMode, lastRunWasSample, onComplete, onError, results, runTargetIndexes, state]);
+  }, [currentJobState, eligibleRowIndexes, jobId, lastRunMode, lastRunWasSample, onComplete, onError, results, runTargetIndexes, state]);
 
   if (results.length === 0) return null;
 
