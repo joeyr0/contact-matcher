@@ -48,7 +48,7 @@ export async function callStructuredJson<T>(systemPrompt: string, userPayload: u
   }
 
   if (provider === 'openai') {
-    const client = new OpenAI({ apiKey });
+    const client = new OpenAI({ apiKey, timeout: 90_000 });
     const model = mode === 'outbound' ? OPENAI_OUTBOUND_MODEL : OPENAI_MODEL;
     const completion = await client.chat.completions.create({
       model,
@@ -64,7 +64,7 @@ export async function callStructuredJson<T>(systemPrompt: string, userPayload: u
     return JSON.parse(content) as T;
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: 90_000 });
   const model = mode === 'outbound' ? ANTHROPIC_OUTBOUND_MODEL : ANTHROPIC_MODEL;
   const completion = await client.messages.create({
     model,

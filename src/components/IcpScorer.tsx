@@ -268,6 +268,8 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
     if (!jobId || state !== 'running') return;
 
     let cancelled = false;
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
     const run = async () => {
       while (!cancelled) {
         let response: Response;
@@ -277,6 +279,11 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
             headers: { 'Content-Type': 'application/json' },
           });
         } catch (error) {
+          if (!cancelled && retryCount < MAX_RETRIES) {
+            retryCount++;
+            await new Promise((resolve) => setTimeout(resolve, 3000 * retryCount));
+            continue;
+          }
           const message = `Network error: ${String(error)}`;
           if (!cancelled) {
             setErrorMsg(message);
@@ -287,6 +294,12 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
         }
 
         if (!response.ok) {
+          // Retry on transient server errors (504 gateway timeout, 502 bad gateway, 500)
+          if ((response.status === 504 || response.status === 502 || response.status === 500) && retryCount < MAX_RETRIES) {
+            retryCount++;
+            await new Promise((resolve) => setTimeout(resolve, 3000 * retryCount));
+            continue;
+          }
           const message = `Scoring failed: HTTP ${response.status}`;
           if (!cancelled) {
             setErrorMsg(message);
@@ -296,6 +309,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
           return;
         }
 
+        retryCount = 0;
         const data = (await response.json()) as IcpJobResponse;
         if (cancelled) return;
         const job = data.job;

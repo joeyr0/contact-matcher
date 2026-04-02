@@ -12,8 +12,10 @@ dist
 dist-ssr
 *.local
 
-# Keep pre-built indexes; exclude only temp uploads
+# Keep pre-built indexes; exclude sensitive and temp files
 data/uploads/
+data/api-keys.json
+data/icp-job-*.json
 
 # Environment variables
 .env

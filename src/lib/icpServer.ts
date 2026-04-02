@@ -24,8 +24,8 @@ import { readPromptConfig } from './promptConfig.js';
 import { DEFAULT_CONTACT_PROMPT, DEFAULT_ICP_PROMPT } from './promptDefaults.js';
 import { callStructuredJson } from './aiProvider.js';
 
-const COMPANY_BATCH_SIZE = 20;
-const CONTACT_BATCH_SIZE = 25;
+const COMPANY_BATCH_SIZE = 10;
+const CONTACT_BATCH_SIZE = 15;
 
 function getCompanyPrompt(): string {
   return readPromptConfig().icpScoring.value || DEFAULT_ICP_PROMPT;
@@ -363,6 +363,10 @@ export async function advanceIcpJobState(job: IcpJobState): Promise<IcpJobState>
         job.updatedAt = new Date().toISOString();
         return job;
       }
+      // Return here so the next poll starts contact scoring in a fresh invocation
+      // rather than making two LLM calls in the same Vercel function.
+      job.updatedAt = new Date().toISOString();
+      return job;
     }
 
     if (job.contactCursor < job.contactInputs.length) {
