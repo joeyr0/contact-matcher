@@ -207,6 +207,7 @@ export interface CompanyScoreResult {
   confidence: 'high' | 'medium' | 'low';
   primaryUseCase: string;
   tvcScore: 1 | 2 | 3 | 4 | 5;
+  tvcFitReason: string;
   reasonSummary: string;
   isReferralSource: boolean;
   isCompetitor: boolean;

@@ -52,14 +52,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
   const { headers, rows, emailColIdx, isDomainColumn, companyColIdx } = parsed;
+  const isCompanyOnly = emailColIdx === -1 && companyColIdx >= 0;
   const results: EnrichedRow[] = [];
   const customerLookup = arrIndex ? getCustomerLookup(arrIndex) : null;
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
+    const companyName = companyColIdx >= 0 ? (row[companyColIdx] ?? '').trim() : '';
+
+    // Company-only mode: skip domain matching, create rows with just company names
+    if (isCompanyOnly) {
+      const match = matchDomain('', sheet15Index, optOutIndex, arrIndex);
+      if (customerLookup && companyName) {
+        const possibleCustomer = findPossibleCustomerMatch(customerLookup, companyName, '');
+        if (possibleCustomer) {
+          match.isCustomer = 'maybe';
+          match.possibleCustomer = 'TRUE';
+          match.customerMatchMethod = 'name_similarity';
+          match.customerMatchConfidence = possibleCustomer.confidence;
+          match.possibleCustomerConfidence = possibleCustomer.confidence;
+          match.possibleCustomerReason = `${possibleCustomer.reason}: ${possibleCustomer.record.customerName}`;
+          match.arrCustomerName = possibleCustomer.record.customerName;
+          match.customerTier = possibleCustomer.record.customerTier;
+          match.stripeSubscriptionStatus = possibleCustomer.record.subscriptionStatus;
+        }
+      }
+      results.push({ originalRow: row, domain: '', companyName, match });
+      if ((i + 1) % 50 === 0 || i === rows.length - 1) {
+        send({ type: 'progress', processed: i + 1, total: rows.length });
+      }
+      continue;
+    }
+
     const rawValue = (row[emailColIdx] ?? '').trim();
     const domain = isDomainColumn ? normalizeDomain(rawValue) : extractDomain(rawValue);
-    const companyName = companyColIdx >= 0 ? (row[companyColIdx] ?? '').trim() : '';
     const match = matchDomain(domain, sheet15Index, optOutIndex, arrIndex);
 
     if (

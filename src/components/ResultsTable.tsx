@@ -103,7 +103,9 @@ function toFlatRows(headers: string[], results: EnrichedRow[]): FlatRow[] {
     row['icp_score'] = match.icpScore === '' ? '' : String(match.icpScore);
     row['icp_confidence'] = match.icpConfidence;
     row['primary_use_case'] = match.primaryUseCase;
+    row['tvc_score'] = match.tvcScore === '' ? '' : String(match.tvcScore);
     row['tvc_relevance'] = match.tvcRelevance;
+    row['tvc_fit_reason'] = match.tvcFitReason;
     row['icp_reason_summary'] = match.icpReasonSummary;
     row['is_competitor'] = match.isCompetitor;
     row['contact_score'] = match.contactScore === '' ? '' : String(match.contactScore);

@@ -95,6 +95,67 @@ CALIBRATION EXAMPLES
 - Salesforce → 1, none. Enterprise SaaS with no wallet/signing relevance.
 - a16z Crypto → referral source. VC fund, not a direct target.
 
+TURNKEY VERIFIABLE CLOUD (TVC) — ICP FIT SCORING
+
+TVC is Turnkey's managed secure enclave platform. It allows companies to run any code inside hardware-isolated enclaves with cryptographic proof of correct execution. Turnkey manages all enclave operations; customers just containerize their app.
+
+TVC core capabilities:
+- **Verifiable Transaction Parsing** — cryptographic proof that unsigned payloads were parsed correctly. Critical trust boundary for exchanges and wallets.
+- **Verifiable Execution** — proof that code ran correctly. Use cases: TWAP execution, best execution compliance, copy trading verification, RFQ resolution, fund rebalancing.
+- **Confidential KMS** — sensitive data (biometrics, PII, keys) processed inside enclaves where even operators can't see the raw data. Cryptographic proof of what code processed the data.
+- **Verifiable Agents** — proof that a specific model + prompt + input produced a specific output/transaction. Audit trail for autonomous financial actions.
+- **Custom Policy Logic** — extend Turnkey's policy engine with verifiable, enclave-enforced rules.
+- **Sealed Auctions** — encrypted bids resolved inside an enclave. No front-running, provably fair.
+- **Verifiable Oracles** — signed, auditable results from enclave-applied logic for financial metrics and market data.
+
+TVC is in production: Coinbase, Anchorage Digital, Polymarket, and others already run workloads on TVC. Millions of requests/day.
+
+TVC SCORING RUBRIC — tvcScore (1–5)
+
+5 = Obvious TVC fit NOW. A concrete verifiable execution, confidential compute, or attestation use case exists today (e.g., exchange with best execution obligations, platform handling biometric data, AI agents making autonomous financial decisions, RFQ/auction platform).
+4 = Strong TVC fit. The company has a clear need for provable execution, data confidentiality, or tamper-proof attestation that TVC addresses, likely within 12 months.
+3 = Plausible TVC fit. The company could benefit from verifiable compute but the use case is speculative or they could solve it without enclaves.
+2 = Weak TVC fit. No clear near-term need for verifiable execution or confidential compute.
+1 = Not a TVC target.
+
+TVC SCORING RULES
+
+1. Companies with regulatory best execution obligations (SEC, FINRA, MiFID II, IIROC) are strong TVC fits (4-5) — verifiable execution proves compliance.
+2. Exchanges, brokerages, and neo-banks executing trades on behalf of users score 4-5 for TVC — verifiable execution addresses the trust gap.
+3. Companies handling sensitive data (biometrics, PII, health data, financial records) in processing pipelines score 4-5 for TVC confidential KMS.
+4. AI agent platforms where agents make autonomous financial decisions score 4-5 — verifiable agents prove what logic produced each action.
+5. RFQ, auction, or order-matching platforms score 4-5 — sealed auctions and verifiable resolution prevent front-running.
+6. Tokenization and fund management platforms score 3-4 — verifiable NAV calculation, rebalancing, and compliance logic.
+7. Companies already using Turnkey for wallet/signing infra are natural TVC upsells — score 1 point higher if the TVC use case is credible.
+8. Pure analytics, monitoring, or read-only data companies score 1-2 for TVC.
+9. Traditional SaaS with no execution, parsing, or sensitive data processing scores 1 for TVC.
+
+TVC FIT REASON RULES for tvcFitReason:
+- 2-3 short sentences explaining WHY TVC fits or doesn't fit this specific company
+- Name the specific TVC capability (verifiable execution, confidential KMS, verifiable agents, sealed auctions, etc.)
+- Reference the company's actual business and what they'd run inside TVC
+- If tvcScore >= 4, explain the concrete use case
+- If tvcScore <= 2, briefly explain why TVC isn't relevant
+- Example (score 5): "Robinhood executes trades for 23M+ retail users under SEC best execution scrutiny. Verifiable execution in TVC would produce cryptographic proof that orders were routed for best price. Converts a regulatory headache into a competitive advantage."
+- Example (score 2): "Chainalysis observes and analyzes blockchain data but does not execute transactions or process sensitive data that would benefit from enclave isolation."
+
+TVC CALIBRATION EXAMPLES
+
+- Wealthsimple → tvcScore 5. Verifiable TWAP execution, IIROC best execution compliance.
+- World (Worldcoin) → tvcScore 5. Confidential biometric processing, iris scan data never exposed to operators.
+- Spectral → tvcScore 5. Verifiable agent actions, proof of what logic produced each autonomous transaction.
+- Robinhood → tvcScore 5. Verifiable retail best execution, SEC compliance proof.
+- Paradigm → tvcScore 5. Verifiable RFQ resolution + sealed auctions for institutional derivatives.
+- eToro → tvcScore 4. Verifiable copy trading execution, prove copied trades match leader.
+- Trade Republic → tvcScore 4. Verifiable best execution for MiFID II compliance.
+- Superstate → tvcScore 4. Verifiable NAV calculation and fund rebalancing logic.
+- Coinbase → tvcScore 5. Already on TVC for transaction parsing.
+- Anchorage Digital → tvcScore 5. Already on TVC.
+- Uniswap Labs → tvcScore 3. Could use verifiable execution for governance/contract upgrades but DEX is onchain already.
+- Chainalysis → tvcScore 1. Analytics only, no execution or sensitive data processing.
+- Nansen → tvcScore 1. Read-only analytics dashboards.
+- Salesforce → tvcScore 1. Enterprise SaaS with no verifiable compute need.
+
 OUTPUT
 
 Return valid JSON only:
@@ -107,6 +168,8 @@ Return valid JSON only:
       "icpScore": 4,
       "confidence": "high",
       "primaryUseCase": "payment_orchestration",
+      "tvcScore": 4,
+      "tvcFitReason": "High-volume cross-border payment processor. Verifiable execution in TVC could prove settlement logic ran correctly, providing auditable proof for compliance and counterparties.",
       "isReferralSource": false,
       "isCompetitor": false,
       "reasonSummary": "High-volume crypto operations likely need programmable signing infrastructure."
@@ -118,7 +181,12 @@ Return valid JSON only:
 RULES FOR reasonSummary:
 - Maximum 18 words
 - Must reference the specific Turnkey use case or explain why the score is low
-- Do not use generic language like "could benefit from blockchain"`;
+- Do not use generic language like "could benefit from blockchain"
+
+RULES FOR tvcFitReason:
+- 2-3 sentences, maximum 50 words
+- Must name the specific TVC capability and how the company would use it
+- If tvcScore <= 2, explain why TVC is not relevant`;
 
 export const DEFAULT_CONTACT_PROMPT = `You are a senior BDR manager for Turnkey.
 
@@ -276,6 +344,57 @@ Return valid JSON only:
       "email2": "follow-up body",
       "linkedinMessage": "linkedin note",
       "rationale": "short internal rationale under 18 words"
+    }
+  ]
+}`;
+
+export const DEFAULT_ACCOUNT_PITCH_PROMPT = `You are a senior GTM strategist for Turnkey.
+
+Given a list of high-ICP companies with their descriptions and scored use cases, write a concise account-level pitch angle for each.
+
+ABOUT TURNKEY
+
+Turnkey is non-custodial wallet and signing infrastructure: the programmable secure layer between applications and cryptographic key operations. Private keys are generated and used inside secure enclaves and never exposed to Turnkey, the customer, or the end user.
+
+Three core capabilities:
+- Generate wallets (HD wallets, per-user sub-organizations, multi-chain: EVM, Solana, Bitcoin, Cosmos, and more)
+- Sign transactions (raw signing, EIP-712, Solana messages, Bitcoin PSBTs)
+- Enforce policies and approvals around key access (spending limits, allowlists, multi-party consensus, smart-contract-scoped permissions)
+
+Strong proof points: Bridge (acquired by Stripe), Polymarket, World, Flutterwave, Alchemy, Superstate, Maple, Moonshot, Axiom, Aave, Magic Eden.
+
+PRIMARY USE CASES
+- embedded_consumer_wallets — app embeds wallets for end users
+- embedded_business_wallets — platform provisions wallets per merchant, fund, or counterparty
+- wallet_as_a_service — company resells wallet infrastructure to its own customers
+- agentic_wallets — AI agents or autonomous systems that hold keys and sign programmatically
+- payment_orchestration — stablecoin settlement, cross-border payments, payouts with wallet + signing automation
+- issuance — tokenization of assets, securities, or real-world assets requiring policy-governed minting/transfer
+- smart_contract_management — deploying, upgrading, or interacting with smart contracts via policy-controlled signing
+- key_management — secure key storage, rotation, import/export, encryption-key custody
+- disaster_recovery — enterprise backup, key escrow, multi-party recovery schemes
+
+YOUR TASK
+
+For each company, write a 2-4 sentence pitch angle that:
+1. Identifies the most applicable and likely Turnkey use case for this specific company
+2. Names the concrete infrastructure problem or opportunity they face
+3. Explains why Turnkey is relevant in one sentence
+4. Suggests the angle a BDR should lead with when approaching this account
+
+Be sharp and specific. Reference the company's actual business. Do not write generic value props. If the company description is available, use it to ground your pitch in what they actually do.
+
+OUTPUT
+
+Return valid JSON only:
+{
+  "pitches": [
+    {
+      "key": "row-key",
+      "company": "Company Name",
+      "pitch": "2-4 sentence pitch angle",
+      "useCase": "primary_use_case",
+      "rationale": "short internal note under 18 words"
     }
   ]
 }`;

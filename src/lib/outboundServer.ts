@@ -1,6 +1,6 @@
-import type { OutboundCandidate, OutboundDraft } from './types';
+import type { AccountPitchCandidate, AccountPitchDraft, OutboundCandidate, OutboundDraft } from './types';
 import { readPromptConfig } from './promptConfig.js';
-import { DEFAULT_OUTBOUND_PROMPT } from './promptDefaults.js';
+import { DEFAULT_ACCOUNT_PITCH_PROMPT, DEFAULT_OUTBOUND_PROMPT } from './promptDefaults.js';
 import { callStructuredJson } from './aiProvider.js';
 const OUTBOUND_BATCH_SIZE = 8;
 
@@ -47,4 +47,37 @@ export async function generateOutboundDrafts(
   }
 
   return drafts;
+}
+
+export async function generateAccountPitches(
+  candidates: AccountPitchCandidate[],
+  onProgress?: (processed: number, total: number) => void,
+): Promise<AccountPitchDraft[]> {
+  if (candidates.length === 0) return [];
+  const pitches: AccountPitchDraft[] = [];
+  const prompt = readPromptConfig().accountPitch.value || DEFAULT_ACCOUNT_PITCH_PROMPT;
+  const batches = batchArray(candidates, OUTBOUND_BATCH_SIZE);
+
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i] ?? [];
+    const response = await callStructuredJson<{ pitches?: Array<Record<string, unknown>> }>(
+      prompt,
+      { companies: batch },
+      'outbound',
+    );
+    for (const raw of response.pitches ?? []) {
+      const key = String(raw.key ?? '');
+      if (!key) continue;
+      pitches.push({
+        key,
+        company: String(raw.company ?? ''),
+        pitch: String(raw.pitch ?? '').slice(0, 600),
+        useCase: String(raw.useCase ?? ''),
+        rationale: String(raw.rationale ?? '').slice(0, 160),
+      });
+    }
+    onProgress?.(Math.min((i + 1) * OUTBOUND_BATCH_SIZE, candidates.length), candidates.length);
+  }
+
+  return pitches;
 }

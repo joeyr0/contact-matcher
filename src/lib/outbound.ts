@@ -1,5 +1,5 @@
 import { extractContactFields, getPreferredCompanyDomain, getPreferredCompanyName } from './icp.js';
-import type { EnrichedRow, OutboundCandidate } from './types';
+import type { AccountPitchCandidate, EnrichedRow, OutboundCandidate } from './types';
 
 export type OutboundScope = 'direct' | 'direct_queue';
 
@@ -55,6 +55,42 @@ export function buildOutboundCandidates(
         icpReasonSummary: row.match.icpReasonSummary,
         contactReasonSummary: row.match.contactReasonSummary,
         roleFit: row.match.roleFit,
+      },
+    ];
+  });
+}
+
+export function buildAccountPitchCandidates(
+  headers: string[],
+  results: EnrichedRow[],
+): AccountPitchCandidate[] {
+  const seen = new Set<string>();
+  const descIdx = headers.findIndex((h) => /^description$/i.test(h.trim()));
+
+  return results.flatMap((row, index) => {
+    const ap = row.match.accountPriority;
+    if (ap !== 'p0' && ap !== 'p1' && ap !== 'p2') return [];
+    const icpScore = row.match.icpScore;
+    if (!icpScore || icpScore < 3) return [];
+
+    const company = getPreferredCompanyName(row);
+    const domain = getPreferredCompanyDomain(row) || row.domain;
+    const dedupeKey = domain || company;
+    if (seen.has(dedupeKey)) return [];
+    seen.add(dedupeKey);
+
+    const description = descIdx >= 0 ? (row.originalRow[descIdx] ?? '').trim() : '';
+
+    return [
+      {
+        key: String(index),
+        company,
+        domain,
+        accountPriority: ap,
+        icpScore,
+        primaryUseCase: row.match.primaryUseCase,
+        icpReasonSummary: row.match.icpReasonSummary,
+        description,
       },
     ];
   });

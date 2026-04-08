@@ -402,6 +402,14 @@ export default function PromptManager() {
             defaults={payload.defaults}
             onRefresh={fetchPrompts}
           />
+          <PromptEditor
+            label="Account Pitch Prompt"
+            description="Account-level pitch generation used when no contact info is available."
+            promptKey="accountPitch"
+            prompts={payload.prompts}
+            defaults={payload.defaults}
+            onRefresh={fetchPrompts}
+          />
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { DEFAULT_CONTACT_PROMPT, DEFAULT_ICP_PROMPT, DEFAULT_OUTBOUND_PROMPT } from './promptDefaults.js';
+import { DEFAULT_ACCOUNT_PITCH_PROMPT, DEFAULT_CONTACT_PROMPT, DEFAULT_ICP_PROMPT, DEFAULT_OUTBOUND_PROMPT } from './promptDefaults.js';
 import type { PromptConfig } from './types';
 import { readDataJSON, writeDataJSON } from '../../api/lib/readData.js';
 
@@ -17,6 +17,7 @@ export function getDefaultPromptConfig(): PromptConfig {
     icpScoring: { value: DEFAULT_ICP_PROMPT, lastUpdated: null },
     contactScoring: { value: DEFAULT_CONTACT_PROMPT, lastUpdated: null },
     outbound: { value: DEFAULT_OUTBOUND_PROMPT, lastUpdated: null },
+    accountPitch: { value: DEFAULT_ACCOUNT_PITCH_PROMPT, lastUpdated: null },
   };
 }
 
@@ -38,6 +39,10 @@ export function readPromptConfig(): PromptConfig {
       outbound: {
         value: parsed.outbound?.value || defaults.outbound.value,
         lastUpdated: parsed.outbound?.lastUpdated ?? null,
+      },
+      accountPitch: {
+        value: parsed.accountPitch?.value || defaults.accountPitch.value,
+        lastUpdated: parsed.accountPitch?.lastUpdated ?? null,
       },
     };
   } catch {
@@ -61,6 +66,10 @@ export async function readPromptConfigAsync(): Promise<PromptConfig> {
     outbound: {
       value: parsed.outbound?.value || defaults.outbound.value,
       lastUpdated: parsed.outbound?.lastUpdated ?? null,
+    },
+    accountPitch: {
+      value: parsed.accountPitch?.value || defaults.accountPitch.value,
+      lastUpdated: parsed.accountPitch?.lastUpdated ?? null,
     },
   };
 }

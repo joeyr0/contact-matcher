@@ -9,7 +9,7 @@ import { parseContactCSV } from '../src/lib/csv.js';
 import { normalizeDomain } from '../src/lib/normalize.js';
 import { extractDomain, matchDomain, getCustomerLookup, findPossibleCustomerMatch } from '../src/lib/matcher.js';
 import { advanceIcpJobState, createIcpJobState, hydrateScoreRows, scoreEnrichedRows } from '../src/lib/icpServer.js';
-import { generateOutboundDrafts } from '../src/lib/outboundServer.js';
+import { generateAccountPitches, generateOutboundDrafts } from '../src/lib/outboundServer.js';
 import { getDefaultPromptConfig, readPromptConfig, resetPromptValue, updatePromptValue } from '../src/lib/promptConfig.js';
 import { getApiKeyStatuses, resetApiKeyValue, updateApiKeyValue, updateApiProvider } from '../src/lib/apiKeyConfig.js';
 import { callTextCompletion, getConfiguredKey, getConfiguredProvider } from '../src/lib/aiProvider.js';
@@ -19,7 +19,7 @@ import { matchByCompanyName } from '../src/lib/matcher.js';
 import type { DomainLookup } from '../src/lib/fuzzy.js';
 import { matchByName, buildAccountNameIndex } from '../src/lib/matcher.js';
 import type { Sheet15Index, OptOutIndex, CommittedArrIndex, EnrichedRow, FuzzyBatchResult, IcpJobState, ReferenceStatus } from '../src/lib/types.js';
-import type { OutboundCandidate } from '../src/lib/types.js';
+import type { AccountPitchCandidate, OutboundCandidate } from '../src/lib/types.js';
 
 const app = express();
 const PORT = 3001;
@@ -219,8 +219,8 @@ app.get('/api/prompts', (_req, res) => {
 });
 
 app.put('/api/prompts', (req, res) => {
-  const { key, value } = req.body as { key?: 'icpScoring' | 'contactScoring' | 'outbound'; value?: string };
-  if ((key !== 'icpScoring' && key !== 'contactScoring' && key !== 'outbound') || typeof value !== 'string') {
+  const { key, value } = req.body as { key?: keyof import('../src/lib/types.js').PromptConfig; value?: string };
+  if ((key !== 'icpScoring' && key !== 'contactScoring' && key !== 'outbound' && key !== 'accountPitch') || typeof value !== 'string') {
     res.status(400).json({ error: 'key and value are required' });
     return;
   }
@@ -228,8 +228,8 @@ app.put('/api/prompts', (req, res) => {
 });
 
 app.post('/api/prompts', (req, res) => {
-  const { key, action } = req.body as { key?: 'icpScoring' | 'contactScoring' | 'outbound'; action?: string };
-  if ((key !== 'icpScoring' && key !== 'contactScoring' && key !== 'outbound') || action !== 'reset') {
+  const { key, action } = req.body as { key?: keyof import('../src/lib/types.js').PromptConfig; action?: string };
+  if ((key !== 'icpScoring' && key !== 'contactScoring' && key !== 'outbound' && key !== 'accountPitch') || action !== 'reset') {
     res.status(400).json({ error: 'key and action=reset are required' });
     return;
   }
@@ -384,6 +384,34 @@ app.post('/api/outbound/stream', async (req, res) => {
     );
 
     send({ type: 'complete', drafts });
+    res.end();
+  } catch (error) {
+    send({ type: 'error', error: error instanceof Error ? error.message : String(error) });
+    res.end();
+  }
+});
+
+app.post('/api/account-pitch/stream', async (req, res) => {
+  const { candidates } = req.body as { candidates?: unknown };
+  if (!Array.isArray(candidates)) {
+    res.status(400).json({ error: 'candidates is a required array' });
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  try {
+    const pitches = await generateAccountPitches(
+      candidates as AccountPitchCandidate[],
+      (processed, total) => send({ type: 'progress', processed, total }),
+    );
+
+    send({ type: 'complete', pitches });
     res.end();
   } catch (error) {
     send({ type: 'error', error: error instanceof Error ? error.message : String(error) });

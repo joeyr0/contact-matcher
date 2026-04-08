@@ -156,6 +156,11 @@ export function parseContactCSV(csvText: string): ParsedContactCSV {
     }
   }
 
+  // If we found a company column but no email/domain, allow company-only mode
+  if (companyColIdx >= 0) {
+    return { headers, rows, emailColIdx: -1, isDomainColumn: false, companyColIdx };
+  }
+
   return {
     headers,
     rows,
@@ -163,6 +168,6 @@ export function parseContactCSV(csvText: string): ParsedContactCSV {
     isDomainColumn: false,
     companyColIdx,
     error:
-      'Could not detect an email or website column. Add a column header like "email", "website", or "domain".',
+      'Could not detect an email, website, or company column. Add a column header like "email", "website", "domain", or "company".',
   };
 }

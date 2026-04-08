@@ -80,6 +80,7 @@ async function scoreCompaniesWithLLM(
         confidence: normalizeConfidence(raw.confidence),
         primaryUseCase: String(raw.primaryUseCase ?? ''),
         tvcScore: normalizeScore(raw.tvcScore),
+        tvcFitReason: String(raw.tvcFitReason ?? '').slice(0, 300),
         isReferralSource: Boolean(raw.isReferralSource),
         isCompetitor: Boolean(raw.isCompetitor),
         reasonSummary: String(raw.reasonSummary ?? '').slice(0, 160),
@@ -108,6 +109,7 @@ async function scoreCompanyBatch(companies: CompanyScoreInput[]): Promise<Map<st
       confidence: normalizeConfidence(raw.confidence),
       primaryUseCase: String(raw.primaryUseCase ?? ''),
       tvcScore: normalizeScore(raw.tvcScore),
+      tvcFitReason: String(raw.tvcFitReason ?? '').slice(0, 300),
       isReferralSource: Boolean(raw.isReferralSource),
       isCompetitor: Boolean(raw.isCompetitor),
       reasonSummary: String(raw.reasonSummary ?? '').slice(0, 160),
@@ -203,6 +205,7 @@ function emptyMatch(): MatchResult {
     primaryUseCase: '',
     tvcScore: '',
     tvcRelevance: '',
+    tvcFitReason: '',
     icpReasonSummary: '',
     isCompetitor: '',
     contactScore: '',
@@ -427,6 +430,7 @@ function applyCompanyScore(match: MatchResult, score: CompanyScoreResult): Match
     next.primaryUseCase = score.primaryUseCase;
     next.tvcScore = score.tvcScore;
     next.tvcRelevance = mapTvcRelevance(score.tvcScore);
+    next.tvcFitReason = score.tvcFitReason;
     next.icpReasonSummary = score.reasonSummary || 'Known competitor';
     return next;
   }
@@ -442,6 +446,7 @@ function applyCompanyScore(match: MatchResult, score: CompanyScoreResult): Match
   next.primaryUseCase = score.primaryUseCase;
   next.tvcScore = score.tvcScore;
   next.tvcRelevance = mapTvcRelevance(score.tvcScore);
+  next.tvcFitReason = score.tvcFitReason;
   next.icpReasonSummary = score.reasonSummary;
   next.isCompetitor = score.isCompetitor ? 'TRUE' : 'FALSE';
   return next;

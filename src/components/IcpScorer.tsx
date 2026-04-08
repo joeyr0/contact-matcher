@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { CompactScoreRow, EnrichedRow, IcpJobResponse, IcpJobState, OutboundDraft, OutboundStreamEvent } from '../lib/types';
+import type { AccountPitchCandidate, AccountPitchDraft, AccountPitchStreamEvent, CompactScoreRow, EnrichedRow, IcpJobResponse, IcpJobState, OutboundDraft, OutboundStreamEvent } from '../lib/types';
 import { buildScoreableCompanies, classifyAccountRoute, extractContactFields } from '../lib/icp';
-import { buildOutboundCandidates, type OutboundScope } from '../lib/outbound';
+import { buildAccountPitchCandidates, buildOutboundCandidates, type OutboundScope } from '../lib/outbound';
 
 interface IcpScorerProps {
   headers: string[];
@@ -24,6 +24,7 @@ const SCORING_MATCH_FIELDS = [
   'primaryUseCase',
   'tvcScore',
   'tvcRelevance',
+  'tvcFitReason',
   'icpReasonSummary',
   'isCompetitor',
   'contactScore',
@@ -44,6 +45,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
   const [outboundProgress, setOutboundProgress] = useState({ processed: 0, total: 0 });
   const [outboundScope, setOutboundScope] = useState<OutboundScope>('direct');
   const [drafts, setDrafts] = useState<OutboundDraft[]>([]);
+  const [accountPitches, setAccountPitches] = useState<AccountPitchDraft[]>([]);
   const [lastRunWasSample, setLastRunWasSample] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [currentJobState, setCurrentJobState] = useState<IcpJobState | null>(null);
@@ -64,6 +66,13 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
 
   const eligibleCompanies = useMemo(() => buildScoreableCompanies(preparedResults), [preparedResults]);
   const excludedCount = results.length - preparedResults.filter((row) => row.match.accountStatus === 'eligible').length;
+  const isCompanyOnly = useMemo(() => {
+    // Check if any row has structured contact data
+    return !results.some((row) => {
+      const contact = extractContactFields(headers, row.originalRow);
+      return contact.hasStructuredContact;
+    });
+  }, [headers, results]);
   const directOutboundCandidates = useMemo(() => buildOutboundCandidates(headers, results, 'direct'), [headers, results]);
   const directQueueOutboundCandidates = useMemo(
     () => buildOutboundCandidates(headers, results, 'direct_queue'),
@@ -89,11 +98,82 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
     return next;
   };
 
+  const runAccountPitches = async (pitchCandidates: AccountPitchCandidate[]) => {
+    setOutboundState('running');
+    setOutboundError(null);
+    setShowOutboundMenu(false);
+    setAccountPitches([]);
+
+    let response: Response;
+    try {
+      response = await fetch('/api/account-pitch/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidates: pitchCandidates }),
+      });
+    } catch (error) {
+      const message = `Account pitch network error: ${String(error)}`;
+      setOutboundError(message);
+      setOutboundState('error');
+      onError(message);
+      return;
+    }
+
+    if (!response.ok || !response.body) {
+      const message = `Account pitch failed: HTTP ${response.status}`;
+      setOutboundError(message);
+      setOutboundState('error');
+      onError(message);
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const event = JSON.parse(line.slice(6)) as AccountPitchStreamEvent;
+          if (event.type === 'progress') {
+            setOutboundProgress({ processed: event.processed, total: event.total });
+          } else if (event.type === 'complete') {
+            setAccountPitches(event.pitches);
+            setOutboundState('complete');
+          } else if (event.type === 'error') {
+            setOutboundError(event.error);
+            setOutboundState('error');
+            onError(event.error);
+          }
+        }
+      }
+    } catch (error) {
+      const message = `Account pitch stream failed: ${String(error)}`;
+      setOutboundError(message);
+      setOutboundState('error');
+      onError(message);
+    }
+  };
+
   const runOutbound = async (scope: OutboundScope, sourceResults = results) => {
     const candidates = buildOutboundCandidates(headers, sourceResults, scope);
     if (candidates.length === 0) {
-      setOutboundError('No scored direct or queue leads with usable contact info are available for outbound.');
-      setOutboundState('error');
+      // Fallback: generate account-level pitches for high-ICP companies
+      const pitchCandidates = buildAccountPitchCandidates(headers, sourceResults);
+      if (pitchCandidates.length === 0) {
+        setOutboundError('No scored leads or high-ICP accounts available for outbound.');
+        setOutboundState('error');
+        return;
+      }
+      await runAccountPitches(pitchCandidates);
       return;
     }
 
@@ -176,6 +256,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
     setOutboundState('idle');
     setOutboundError(null);
     setDrafts([]);
+    setAccountPitches([]);
     setLastRunWasSample(isSampleRun);
     setLastRunMode(mode);
     setRunTargetIndexes(targetIndexes);
@@ -501,10 +582,17 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
             </div>
           </div>
 
-          <p className="text-xs text-emerald-700">
-            Direct leads available: {directOutboundCandidates.length.toLocaleString()} · Direct + queue available:{' '}
-            {directQueueOutboundCandidates.length.toLocaleString()}
-          </p>
+          {isCompanyOnly ? (
+            <p className="text-xs text-emerald-700">
+              Company-only mode — {eligibleCompanies.length.toLocaleString()} account{eligibleCompanies.length === 1 ? '' : 's'} scored (no contacts to classify).
+              Use &quot;Create Outbound&quot; for account-level pitch angles.
+            </p>
+          ) : (
+            <p className="text-xs text-emerald-700">
+              Direct leads available: {directOutboundCandidates.length.toLocaleString()} · Direct + queue available:{' '}
+              {directQueueOutboundCandidates.length.toLocaleString()}
+            </p>
+          )}
           {lastRunWasSample && (
             <p className="text-xs text-amber-700">
               Only the first {Math.min(SAMPLE_LIMIT, eligibleRowIndexes.length)} eligible leads were scored in this test run. Use Run ICP for the full list.
@@ -531,7 +619,9 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium text-blue-900">
-                  Generating outbound for {outboundScope === 'direct' ? 'direct' : 'direct + queue'} leads…
+                  {directQueueOutboundCandidates.length === 0
+                    ? 'Generating account pitch angles…'
+                    : `Generating outbound for ${outboundScope === 'direct' ? 'direct' : 'direct + queue'} leads…`}
                 </span>
                 <span className="text-blue-700">
                   {outboundProgress.total > 0 ? `${outboundProgress.processed}/${outboundProgress.total}` : 'Starting'}
@@ -550,7 +640,48 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
 
           {outboundState === 'error' && <p className="text-sm font-medium text-red-700">{outboundError}</p>}
 
-          {outboundState === 'complete' && (
+          {outboundState === 'complete' && accountPitches.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-blue-900">
+                    Account pitches ready for {accountPitches.length.toLocaleString()} account{accountPitches.length === 1 ? '' : 's'}.
+                  </p>
+                  <p className="text-xs text-blue-700">
+                    No contact info available — generated account-level pitch angles instead.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    const text = accountPitches
+                      .map((p) => [`${p.company} (${p.useCase})`, p.pitch, `Internal: ${p.rationale}`].join('\n'))
+                      .join('\n\n---\n\n');
+                    void navigator.clipboard.writeText(text);
+                  }}
+                  className="rounded-lg border border-blue-300 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-50"
+                >
+                  Copy all
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {accountPitches.map((pitch) => (
+                  <div key={pitch.key} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <div className="mb-2 flex items-center gap-2">
+                      <p className="text-sm font-semibold text-gray-900">{pitch.company}</p>
+                      <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
+                        {pitch.useCase}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{pitch.pitch}</p>
+                    <p className="mt-2 text-xs text-gray-400">{pitch.rationale}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {outboundState === 'complete' && drafts.length > 0 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-4">
                 <div>

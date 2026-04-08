@@ -58,6 +58,7 @@ export interface PromptConfig {
   icpScoring: PromptEntry;
   contactScoring: PromptEntry;
   outbound: PromptEntry;
+  accountPitch: PromptEntry;
 }
 
 export interface ApiKeyEntry {
@@ -115,6 +116,7 @@ export interface MatchResult {
   primaryUseCase: string;
   tvcScore: '' | 1 | 2 | 3 | 4 | 5;
   tvcRelevance: '' | 'high' | 'medium' | 'low';
+  tvcFitReason: string;
   icpReasonSummary: string;
   isCompetitor: '' | 'TRUE' | 'FALSE';
   contactScore: '' | 1 | 2 | 3 | 4 | 5;
@@ -234,6 +236,30 @@ export interface IcpJobResponse {
 export type OutboundStreamEvent =
   | { type: 'progress'; processed: number; total: number }
   | { type: 'complete'; drafts: OutboundDraft[]; error?: never }
+  | { type: 'error'; error: string };
+
+export interface AccountPitchCandidate {
+  key: string;
+  company: string;
+  domain: string;
+  accountPriority: 'p0' | 'p1' | 'p2';
+  icpScore: 1 | 2 | 3 | 4 | 5;
+  primaryUseCase: string;
+  icpReasonSummary: string;
+  description: string;
+}
+
+export interface AccountPitchDraft {
+  key: string;
+  company: string;
+  pitch: string;
+  useCase: string;
+  rationale: string;
+}
+
+export type AccountPitchStreamEvent =
+  | { type: 'progress'; processed: number; total: number }
+  | { type: 'complete'; pitches: AccountPitchDraft[]; error?: never }
   | { type: 'error'; error: string };
 
 export interface FuzzyBatchRequest {
