@@ -29,6 +29,7 @@ function makeMatch(overrides: Partial<MatchResult> = {}): MatchResult {
     primaryUseCase: 'payment_orchestration',
     tvcScore: '',
     tvcRelevance: '',
+    tvcFitReason: '',
     icpReasonSummary: 'Clear stablecoin wallet need.',
     isCompetitor: 'FALSE',
     contactScore: 5,

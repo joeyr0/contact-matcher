@@ -38,6 +38,7 @@ function makeMatch(overrides: Partial<MatchResult> = {}): MatchResult {
     primaryUseCase: '',
     tvcScore: '',
     tvcRelevance: '',
+    tvcFitReason: '',
     icpReasonSummary: '',
     isCompetitor: '',
     contactScore: '',
