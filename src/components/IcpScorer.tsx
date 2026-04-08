@@ -486,7 +486,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
                   onClick={() => void runScore('score_sample')}
                   className="w-full rounded-md px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
                 >
-                  Test run first 5 eligible leads
+                  Test run first 5 eligible {isCompanyOnly ? 'accounts' : 'leads'}
                 </button>
                 <button
                   onClick={() => void runScore('score_and_outbound_direct')}
@@ -510,7 +510,7 @@ export default function IcpScorer({ headers, results, onComplete, onError }: Icp
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium text-emerald-900">
-              {progress.stage === 'contacts' ? 'Model-reviewing contacts…' : 'Scoring companies…'}
+              {progress.stage === 'contacts' && !isCompanyOnly ? 'Model-reviewing contacts…' : 'Scoring companies…'}
             </span>
             <span className="text-emerald-700">
               {progress.total > 0 ? `${progress.processed}/${progress.total}` : 'Starting'}

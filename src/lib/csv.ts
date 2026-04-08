@@ -113,7 +113,8 @@ export function parseContactCSV(csvText: string): ParsedContactCSV {
     const row = allRows[i];
     const hasEmailHeader = row.some((cell) => EMAIL_HEADER_NAMES.has(cell.toLowerCase().trim()));
     const hasDomainHeader = row.some((cell) => DOMAIN_HEADER_NAMES.has(cell.toLowerCase().trim()));
-    if (hasEmailHeader || hasDomainHeader) {
+    const hasCompanyHeader = row.some((cell) => isCompanyHeader(cell));
+    if (hasEmailHeader || hasDomainHeader || hasCompanyHeader) {
       headerRowIdx = i;
       break;
     }

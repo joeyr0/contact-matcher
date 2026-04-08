@@ -41,9 +41,12 @@ const ENRICHED_HEADERS = [
   'icp_score',
   'icp_confidence',
   'primary_use_case',
+  'tvc_score',
   'tvc_relevance',
+  'tvc_fit_reason',
   'icp_reason_summary',
   'is_competitor',
+  'is_referral_source',
   'contact_score',
   'contact_priority',
   'role_fit',
@@ -108,6 +111,7 @@ function toFlatRows(headers: string[], results: EnrichedRow[]): FlatRow[] {
     row['tvc_fit_reason'] = match.tvcFitReason;
     row['icp_reason_summary'] = match.icpReasonSummary;
     row['is_competitor'] = match.isCompetitor;
+    row['is_referral_source'] = match.accountStatus === 'referral_source' ? 'TRUE' : 'FALSE';
     row['contact_score'] = match.contactScore === '' ? '' : String(match.contactScore);
     row['contact_priority'] = match.contactPriority;
     row['role_fit'] = match.roleFit;
@@ -215,6 +219,8 @@ function buildVisibilityPreset(headers: string[], tableView: TableView, detailMo
     visibility['contact_priority'] = true;
     visibility['match_confidence'] = true;
     visibility['account_status'] = detailMode === 'detailed';
+    visibility['tvc_score'] = true;
+    visibility['tvc_fit_reason'] = detailMode === 'detailed';
     visibility['icp_confidence'] = detailMode === 'detailed';
     visibility['tvc_relevance'] = detailMode === 'detailed';
     visibility['icp_reason_summary'] = detailMode === 'detailed';
